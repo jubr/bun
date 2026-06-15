@@ -305,8 +305,8 @@ export function packageAndUpload(cfg: Config, output: BunOutput): void {
   // Binaries that can't run on this host: every field is a build-time
   // constant, so generate the same payload host-side instead (the feature
   // list is parsed out of src/analytics/lib.rs; see features-json.ts).
-  if (!cfg.canRunOnHost) {
-    console.log("Generating features.json (host-side; cross-compiled binary cannot run here)...");
+  if (!cfg.canRunOnHost || cfg.standalone) {
+    console.log("Generating features.json (host-side; this binary cannot run features.ts here)...");
     writeFileSync(resolve(buildDir, "features.json"), crossFeaturesJson(cfg));
   } else {
     console.log("Generating features.json...");
