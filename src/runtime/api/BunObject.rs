@@ -127,6 +127,14 @@ mod static_adapters {
     }
 
     pub(super) fn js_bundler_build(g: &JSGlobalObject, cf: &CallFrame) -> JsResult<JSValue> {
+        #[cfg(bun_standalone)]
+        {
+            let _ = cf;
+            return Err(g.throw_type_error(format_args!(
+                "Bun.build is not available in standalone executables. Install Bun: https://bun.com/get"
+            )));
+        }
+        #[cfg(not(bun_standalone))]
         crate::api::js_bundler::JSBundler::build_fn(g, cf)
     }
     /// `Bun.$` parsed-script constructor — wraps the marked-argument-buffer host fn.
@@ -239,7 +247,10 @@ pub(crate) mod bun_object {
     // --- Callbacks ---
     export_callbacks! {
         BunObject_callback_build => super::static_adapters::js_bundler_build,
+        #[cfg(not(bun_standalone))]
         BunObject_callback_color => bun_css_jsc::js_function_color,
+        #[cfg(bun_standalone)]
+        BunObject_callback_color => super::color_unavailable,
         BunObject_callback_connect => super::static_adapters::listener_connect,
         BunObject_callback_file => crate::webcore::blob::construct_bun_file,
         BunObject_callback_jest => Jest::call,
@@ -1395,6 +1406,13 @@ fn serve(global_object: &JSGlobalObject, callframe: &CallFrame) -> JsResult<JSVa
         (false, true) => serve_with!(crate::api::HTTPSServer, AnyServerTag::HTTPSServer),
         (false, false) => serve_with!(crate::api::HTTPServer, AnyServerTag::HTTPServer),
     }
+}
+
+#[cfg(bun_standalone)]
+pub(crate) fn color_unavailable(global: &JSGlobalObject, _: &CallFrame) -> JsResult<JSValue> {
+    Err(global.throw_type_error(format_args!(
+        "Bun.color is not available in standalone executables",
+    )))
 }
 
 pub(crate) fn alloc_unsafe<'a>(
