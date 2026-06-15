@@ -532,6 +532,7 @@ pub(crate) fn run_task(
             cast!(JSCDeferredWorkTask).run(global)?;
         }
         task_tag::PollPendingModulesTask => {
+            #[cfg(not(bun_standalone))]
             vm.modules.on_poll();
         }
         task_tag::RuntimeTranspilerStore => {

@@ -75,6 +75,7 @@ pub(crate) mod generated_jssink; // include!()s ${BUN_CODEGEN_DIR}/generated_jss
 
 pub(crate) mod dns_jsc;
 pub(crate) mod image;
+#[cfg_attr(bun_standalone, allow(dead_code))]
 pub(crate) mod test_runner;
 pub(crate) mod valkey_jsc;
 

@@ -58,11 +58,29 @@ pub(crate) use bun_sys_jsc::error_jsc::TestingAPIs::translate_uv_error_to_e as s
 pub(crate) use bun_http_jsc::headers_jsc::h2_live_counts as http_h2_client_testing_ap_is_live_counts;
 pub(crate) use bun_http_jsc::headers_jsc::h3_quic_live_counts as http_h3_client_testing_ap_is_quic_live_counts;
 
+#[cfg(not(bun_standalone))]
 mod css {
     pub(crate) use bun_css_jsc::css_internals::{
         _test, attr_test, minify_error_test_with_options, minify_test, minify_test_with_options,
         prefix_test, prefix_test_with_options, test_with_options,
     };
+}
+#[cfg(bun_standalone)]
+mod css {
+    use bun_jsc::{CallFrame, JSGlobalObject, JSValue, JsResult};
+    macro_rules! stub {
+        ($($name:ident),* $(,)?) => {$(
+            pub fn $name(global: &JSGlobalObject, _: &CallFrame) -> JsResult<JSValue> {
+                Err(global.throw_type_error(format_args!(
+                    "CSS internals are not available in standalone executables",
+                )))
+            }
+        )*};
+    }
+    stub!(
+        _test, attr_test, minify_error_test_with_options, minify_test,
+        minify_test_with_options, prefix_test, prefix_test_with_options, test_with_options,
+    );
 }
 pub(crate) use css::_test as css_jsc_css_internals__test;
 pub(crate) use css::attr_test as css_jsc_css_internals_attr_test;

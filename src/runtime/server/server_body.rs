@@ -754,8 +754,17 @@ impl AnyRoute {
         argument: JSValue,
         init_ctx: &mut ServerInitContext,
     ) -> JsResult<Option<AnyRoute>> {
-        use bun_collections::zig_hash_map::MapEntry as StdEntry;
         if let Some(html_bundle) = argument.as_class_this_ptr::<HTMLBundle>() {
+            #[cfg(bun_standalone)]
+            {
+                let _ = html_bundle;
+                return Err(init_ctx.global.throw_type_error(format_args!(
+                    "Serving HTML routes requires the bundler, which is not available in standalone executables"
+                )));
+            }
+            #[cfg(not(bun_standalone))]
+            {
+            use bun_collections::zig_hash_map::MapEntry as StdEntry;
             let entry = init_ctx
                 .dedupe_html_bundle_map
                 .entry(html_bundle.as_ptr().cast_const());
@@ -771,6 +780,7 @@ impl AnyRoute {
                 }
                 StdEntry::Occupied(o) => AnyRoute::Html(RefPtr::from_this(o.get().this_ptr())),
             }));
+            }
         }
 
         if let Some(html_route) = Self::bundled_html_manifest_from_js(argument, init_ctx)? {

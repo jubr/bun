@@ -594,6 +594,13 @@ impl Expect {
         value: *mut JSValue,
         any_constructor_type: *mut u8,
     ) -> bool {
+        #[cfg(bun_standalone)]
+        {
+            let _ = (instance_value, global_this, out_flags, value, any_constructor_type);
+            return false;
+        }
+        #[cfg(not(bun_standalone))]
+        {
         // SAFETY: `from_js` returns the live `m_ctx` payload owned by `instance_value`.
         let flags: Flags = 'flags: { unsafe {
             if let Some(instance) = ExpectCustomAsymmetricMatcher::from_js(instance_value) {
@@ -633,6 +640,7 @@ impl Expect {
                 true
             }
             Err(_) => false,
+        }
         }
     }
 
@@ -2623,6 +2631,12 @@ impl ExpectCustomAsymmetricMatcher {
         global_this: *const JSGlobalObject,
         received: JSValue,
     ) -> bool {
+        #[cfg(bun_standalone)]
+        {
+            let _ = (this, this_value, global_this, received);
+            false
+        }
+        #[cfg(not(bun_standalone))]
         // SAFETY: called from C++ with valid pointers
         unsafe { Self::execute_impl(&*this, this_value, &*global_this, received) }.unwrap_or(false)
     }
@@ -2748,6 +2762,14 @@ pub(crate) struct ExpectMatcherUtils {}
 impl ExpectMatcherUtils {
     #[unsafe(no_mangle)]
     pub(crate) extern "C" fn ExpectMatcherUtils_createSigleton(global_this: &JSGlobalObject) -> JSValue {
+        #[cfg(bun_standalone)]
+        {
+            let _ = global_this.throw(format_args!(
+                "bun:test is not available in standalone executables"
+            ));
+            JSValue::ZERO
+        }
+        #[cfg(not(bun_standalone))]
         ExpectMatcherUtils {}.to_js(global_this)
     }
 
