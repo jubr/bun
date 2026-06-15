@@ -72,7 +72,20 @@ pub(crate) struct ServerConfig {
     pub(crate) negative_routes: Vec<ZBox>,
     pub(crate) user_routes_to_build: Vec<UserRouteBuilder>,
 
+    #[cfg(not(bun_standalone))]
     pub(crate) bake: Option<crate::bake::UserOptions>,
+}
+
+impl ServerConfig {
+    /// `self.bake.is_some()` — under `cfg(bun_standalone)` the field is compiled
+    /// out (DevServer/Bake is unavailable), so this is statically `false`.
+    #[inline(always)]
+    pub(crate) fn has_bake(&self) -> bool {
+        #[cfg(not(bun_standalone))]
+        return self.bake.is_some();
+        #[cfg(bun_standalone)]
+        false
+    }
 }
 
 impl Default for ServerConfig {
@@ -104,6 +117,7 @@ impl Default for ServerConfig {
             static_routes: Vec::new(),
             negative_routes: Vec::new(),
             user_routes_to_build: Vec::new(),
+            #[cfg(not(bun_standalone))]
             bake: None,
         }
     }
@@ -306,6 +320,7 @@ impl ServerConfig {
             static_routes: core::mem::take(&mut self.static_routes),
             negative_routes: core::mem::take(&mut self.negative_routes),
             user_routes_to_build: core::mem::take(&mut self.user_routes_to_build),
+            #[cfg(not(bun_standalone))]
             bake: self.bake.take(),
         };
 
@@ -891,6 +906,7 @@ impl ServerConfig {
 
             // When HTML bundles are provided, ensure DevServer options are ready
             // The presence of these options causes Bun.serve to initialize things.
+            #[cfg(not(bun_standalone))]
             if !init_ctx.dedupe_html_bundle_map.is_empty()
                 || !init_ctx.framework_router_list.is_empty()
                 || bake_pages
@@ -1090,6 +1106,15 @@ impl ServerConfig {
                     if !bun_core::FeatureFlags::bake() {
                         break 'brk;
                     }
+                    #[cfg(bun_standalone)]
+                    {
+                        let _ = bake_args_js;
+                        return Err(global.throw_invalid_arguments(format_args!(
+                            "Bun.serve `app` requires the bundler, which is not available in standalone executables. Install Bun: https://bun.com/get",
+                        )));
+                    }
+                    #[cfg(not(bun_standalone))]
+                    {
                     if args.bake.is_some() {
                         // "app" is likely to be removed in favor of the HTML loader.
                         return Err(global.throw_invalid_arguments(format_args!(
@@ -1104,6 +1129,7 @@ impl ServerConfig {
                     }
 
                     args.bake = Some(crate::bake::UserOptions::from_js(bake_args_js, global)?);
+                    }
                 }
             }
         }
@@ -1163,7 +1189,7 @@ impl ServerConfig {
                     .throw_invalid_arguments(format_args!("Expected fetch() to be a function")));
             }
             args.on_request = on_request_;
-        } else if args.bake.is_none()
+        } else if !args.has_bake()
             && !args.is_node_http_server
             && (args.static_routes.len() + args.user_routes_to_build.len()) == 0
             && !opts.previous_fetch
@@ -1415,7 +1441,7 @@ impl ServerConfig {
 
         // NOTE: deferred assertion from top of fn
         if !args.development.is_hmr_enabled() {
-            debug_assert!(args.bake.is_none());
+            debug_assert!(!args.has_bake());
         }
 
         Ok(args)

@@ -29,6 +29,7 @@ pub(crate) mod add_completions;
 pub(crate) mod colon_list_type;
 #[path = "discord_command.rs"]
 pub(crate) mod discord_command;
+#[cfg(not(bun_standalone))]
 #[path = "shell_completions.rs"]
 pub(crate) mod shell_completions;
 
@@ -388,7 +389,14 @@ fn cli_dupe_z(s: &[u8]) -> *const core::ffi::c_char {
 ///
 /// Canonical static lives in `bun_install` so both crates read/write the SAME
 /// flag (`RunCommand::create_fake_temporary_node_executable` lives there).
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install::PRETEND_TO_BE_NODE;
+/// Under `bun_standalone` the install tier is severed, so a local static is
+/// used instead — the standalone runtime never spawns lifecycle scripts that
+/// need to observe the shared flag from `bun_install`.
+#[cfg(bun_standalone)]
+pub(crate) static PRETEND_TO_BE_NODE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
 
 /// This is set `true` during `Command.which()` if argv0 is "bunx"
 static IS_BUNX_EXE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);

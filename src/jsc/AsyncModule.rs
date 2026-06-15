@@ -1,8 +1,11 @@
+#![cfg_attr(bun_standalone, allow(dead_code, unused_imports))]
+
 use core::ffi::c_void;
 
 use bun_alloc::Arena as ArenaAllocator;
 use bun_bundler::transpiler::ParseResult;
 use bun_core::{EncodedSlice, String as BunString};
+#[cfg(not(bun_standalone))]
 use bun_install::Resolution;
 use bun_io::KeepAlive;
 use bun_resolver::fs as Fs;
@@ -54,6 +57,7 @@ pub struct AsyncModule {
     pub(crate) poll_ref: KeepAlive,
 }
 
+#[cfg(not(bun_standalone))]
 struct PackageDownloadError<'a> {
     pub name: &'a [u8],
     pub resolution: Resolution,
@@ -61,6 +65,7 @@ struct PackageDownloadError<'a> {
     pub url: &'a [u8],
 }
 
+#[cfg(not(bun_standalone))]
 struct PackageResolveError<'a> {
     pub name: &'a [u8],
     pub err: &'static str,
@@ -219,20 +224,27 @@ unsafe extern "C" {
     );
 }
 
+#[cfg(not(bun_standalone))]
 use core::sync::atomic::Ordering;
+#[cfg(not(bun_standalone))]
 use std::io::Write as _;
 
+#[cfg(not(bun_standalone))]
 use bun_install::package_manager::run_tasks;
+#[cfg(not(bun_standalone))]
 use bun_install::{self as install, LogLevel, PackageID};
 
+#[cfg(not(bun_standalone))]
 use crate::event_loop::{ConcurrentTaskItem, Task};
 
 /// `RunTasksCallbacks` impl for the auto-install module queue. `onResolve` /
 /// `onPackageManifestError` / `onPackageDownloadError` forward to the `Queue`
 /// methods, `progress_bar` selected via const generic to match the
 /// `enable_ansi_colors_stderr` branch.
+#[cfg(not(bun_standalone))]
 struct QueueRunTasksCallbacks<const PROGRESS: bool>;
 
+#[cfg(not(bun_standalone))]
 impl<const PROGRESS: bool> run_tasks::RunTasksCallbacks for QueueRunTasksCallbacks<PROGRESS> {
     type Ctx = Queue;
 
@@ -266,6 +278,7 @@ impl<const PROGRESS: bool> run_tasks::RunTasksCallbacks for QueueRunTasksCallbac
     }
 }
 
+#[cfg(not(bun_standalone))]
 impl Queue {
     pub fn enqueue(&mut self, global_object: &JSGlobalObject, opts: InitOpts<'_>) {
         bun_core::scoped_log!(AsyncModule, "enqueue: {}", bstr::BStr::new(opts.specifier));
@@ -527,6 +540,7 @@ impl Queue {
     }
 }
 
+#[cfg(not(bun_standalone))]
 impl AsyncModule {
     pub(crate) fn init(
         opts: InitOpts<'_>,

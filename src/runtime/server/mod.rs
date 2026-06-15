@@ -91,6 +91,7 @@ pub(crate) use dev_error_page::DevErrorPage;
 pub(crate) mod file_response_stream;
 pub(crate) use file_response_stream::FileResponseStream;
 
+#[cfg_attr(bun_standalone, allow(dead_code, unused_imports))]
 #[path = "HTMLBundle.rs"]
 pub(crate) mod html_bundle;
 pub(crate) use html_bundle::HTMLBundle;
@@ -136,6 +137,7 @@ macro_rules! for_each_mux_app {
 // `server_body.rs` holds the large method bodies (`on_request`, `on_upgrade`,
 // route setup, …) split out to keep this module declaration file readable.
 
+#[cfg_attr(bun_standalone, allow(dead_code, unused_imports))]
 #[path = "server_body.rs"]
 mod server_body;
 pub(crate) use server_body::{GetOrStartLoadResult, ServePluginsCallback};
@@ -172,6 +174,7 @@ pub(crate) enum AnyRoute {
     /// Serve a directory tree — `"/static/*": { dir: "./public" }`
     Directory(bun_ptr::RefPtr<DirectoryRoute>),
     /// Bundle an HTML import — `import html from "./index.html"; "/": html`
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     Html(bun_ptr::RefPtr<html_bundle::Route>),
     /// Use file-system routing — `"/*": { dir: …, style: "nextjs-pages" }`
     FrameworkRouter,
@@ -375,6 +378,7 @@ pub(crate) type ServerRequestContext<const SSL: bool, const DEBUG: bool> =
 pub(crate) enum CreateJsRequest {
     Yes,
     No,
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     Bake,
 }
 
@@ -392,6 +396,7 @@ pub(crate) struct PreparedRequest<const SSL: bool, const DEBUG: bool> {
 impl<const SSL: bool, const DEBUG: bool> PreparedRequest<SSL, DEBUG> {
     /// Used by DevServer to defer calling
     /// the JS handler until the bundle is actually ready.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn save(
         self,
         global: &jsc::JSGlobalObject,
@@ -489,10 +494,11 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
     // ─────────────────────────────────────────────────────────────────────────
 
     pub(crate) fn memory_cost(&self) -> usize {
+        let dev_cost = self.dev_server.as_ref().map_or(0, |d| d.memory_cost());
         core::mem::size_of::<Self>()
             + self.base_url_string_for_joining.len()
             + self.config.memory_cost()
-            + self.dev_server.as_ref().map_or(0, |d| d.memory_cost())
+            + dev_cost
     }
 
     pub(crate) fn h3_alt_svc(&self) -> Option<&[u8]> {
@@ -963,6 +969,7 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
     /// # Safety
     /// `this` must point to a live heap-allocated `NewServer`; `resp` must be
     /// the live response handle for the request being resumed.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     fn on_saved_request<const ARG_COUNT: usize>(
         this: *mut Self,
         req: SavedRequestUnion<'_>,
@@ -1949,6 +1956,7 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
             // Detach DevServer. This is needed because there are aggressive
             // tests that check for DevServer memory soundness. Keeping the JS
             // binding alive should not pin `dev.memory_cost()` bytes.
+            #[cfg(not(bun_standalone))]
             if let Some(dev) = self.dev_server.take() {
                 if let Some(app) = self.app {
                     // S012: `NewApp<SSL>` is a ZST opaque — safe `*mut → &mut` deref.
@@ -2241,6 +2249,7 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
         // (since-moved) stack slot. On Err, the `Box<Self>` drop frees the
         // half-built server.
         // SAFETY: `server` is the freshly-boxed `*mut Self`; uniquely owned here.
+        #[cfg(not(bun_standalone))]
         if let Some(bake_options) = unsafe { &mut (*server).config.bake } {
             // SAFETY: `server` is the freshly-boxed `*mut Self`; uniquely owned here.
             let broadcast = unsafe {
@@ -2292,6 +2301,8 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
         // reshaped for borrowck — `dev_server` is `Option<Box<..>>`;
         // snapshot the raw `*mut DevServer` so per-iteration `&mut` derives
         // don't conflict with `&mut self.config` / `&mut self.user_routes`.
+        // (Under `cfg(bun_standalone)` the Box payload is uninhabited so this is
+        // statically `None`; the gated bodies below are dead code.)
         let dev_server: Option<*mut crate::bake::DevServer::DevServer> =
             self.dev_server.as_deref_mut().map(std::ptr::from_mut);
 
@@ -2584,6 +2595,7 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
                             path_has_user_head_route,
                         );
                     });
+                    #[cfg(not(bun_standalone))]
                     if let Some(dev) = dev_server {
                         // SAFETY: `dev` is the live `*mut DevServer` snapshotted
                         // from `self.dev_server` above; no other `&mut` to it
@@ -2634,7 +2646,9 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
         let mux_star_covered = star_methods_covered_by_user;
 
         // --- 8. Handle DevServer routes & track "/*" coverage ---
+        #[cfg_attr(bun_standalone, allow(unused_mut))]
         let mut has_dev_server_for_star_path = false;
+        #[cfg(not(bun_standalone))]
         if let Some(dev) = dev_server {
             // dev.setRoutes might register its own "/*" HTTP handler
             // SAFETY: `dev` is the live `*mut DevServer` snapshotted from
@@ -2648,6 +2662,8 @@ impl<const SSL: bool, const DEBUG: bool> NewServer<SSL, DEBUG> {
                 star_methods_covered_by_user = http_method::Set::all();
             }
         }
+        #[cfg(bun_standalone)]
+        let _ = dev_server;
 
         // Setup user websocket fallback route aka fetch function; if fetch is
         // not provided will respond with 403.
@@ -3990,6 +4006,7 @@ impl AnyServer {
     }
 
     /// Whether a route of the `routes` option, or a static route, has exactly this path.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn has_route(&self, path: &[u8]) -> bool {
         any_server_dispatch!(self, |s| {
             s.user_routes
@@ -4083,6 +4100,7 @@ impl AnyServer {
     pub(crate) fn set_inspector_server_id(&mut self, id: jsc::DebuggerId) {
         any_server_dispatch_mut!(self, |s| {
             s.inspector_server_id = id;
+            #[cfg(not(bun_standalone))]
             if let Some(dev_server) = s.dev_server.as_deref_mut() {
                 dev_server.inspector_server_id = id;
             }
@@ -4096,6 +4114,7 @@ impl AnyServer {
     /// Dispatch the user `fetch` handler:
     /// un-erase the SSL bool from the tag and downcast
     /// `AnyResponse` to the matching `NewAppResponse<SSL>` variant.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn on_request(&self, req: &mut uws_sys::Request, resp: uws::AnyResponse) {
         // `s` is the live `*mut NewServer` carried in `self.ptr`,
         // tagged at construction in `AnyServer::from`.
@@ -4110,6 +4129,7 @@ impl AnyServer {
         any_server_dispatch_mut!(self, |s| s.on_static_request_complete())
     }
 
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn num_subscribers(&self, topic: &[u8]) -> u32 {
         any_server_dispatch!(self, |s| match s.app {
             // S012: `NewApp<SSL>` is a ZST opaque — safe `*mut → &mut` via
@@ -4124,6 +4144,7 @@ impl AnyServer {
         })
     }
 
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn publish(
         &self,
         topic: &[u8],
@@ -4147,6 +4168,7 @@ impl AnyServer {
     /// Wraps a stack-lifetime µWS request into a
     /// JS-visible `Request` + heap `RequestContext` so it can outlive the
     /// handler frame (used by bake's deferred bundling path).
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn prepare_and_save_js_request_context(
         &self,
         req: &mut uws::Request,
@@ -4174,6 +4196,7 @@ impl AnyServer {
 
     /// Invoke the user's route handler for a request that
     /// was deferred (bake bundle-then-serve flow).
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn on_saved_request<const EXTRA_ARG_COUNT: usize>(
         &self,
         req: SavedRequestUnion<'_>,
@@ -4330,6 +4353,7 @@ pub(crate) mod http_server_agent {
 }
 
 // ─── SavedRequest ────────────────────────────────────────────────────────────
+#[cfg_attr(bun_standalone, allow(dead_code))]
 pub(crate) struct SavedRequest {
     /// May be `.empty` until
     /// `prepare_js_request_context` populates it; `deinit` must tolerate the
@@ -4343,12 +4367,14 @@ pub(crate) struct SavedRequest {
 impl SavedRequest {
     /// Release the JS strong ref and
     /// drop the request-context refcount. `request`/`response` are non-owning.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn deinit(&mut self) {
         self.js_request.deinit();
         self.ctx.deref();
     }
 }
 
+#[cfg_attr(bun_standalone, allow(dead_code))]
 pub(crate) enum SavedRequestUnion<'a> {
     /// Direct pointer to a µWebSockets request that is still on the stack.
     Stack(&'a mut uws::Request),
