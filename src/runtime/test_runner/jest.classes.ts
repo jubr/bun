@@ -868,4 +868,12 @@ export default [
       },
     },
   }),
-];
+].map(d =>
+  // Under `cfg(bun_standalone)` the codegen emits a ZST backing type and zero-returning thunks
+  // for every class here, so the `expect()` / `bun:test` machinery behind them is unreferenced
+  // and the linker drops it. None of these are user-reachable in a standalone executable (the
+  // `bun:test` module loader throws first), so the stubs never actually run.
+  // `Object.assign` (not spread) - `define()` returns a class instance whose prototype carries
+  // `hasOwnProperties()`; spreading would drop it.
+  Object.assign(d, { standaloneStub: "bun:test is not available in standalone executables" }),
+);
