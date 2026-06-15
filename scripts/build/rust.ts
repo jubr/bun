@@ -282,6 +282,11 @@ export function cargoBuildInvocation(cfg: Config): CargoInvocation {
     profile,
     "--locked",
   ];
+  if (cfg.standalone) {
+    // Propagates to `bun_runtime/standalone` (see src/runtime/Cargo.toml). Paired with
+    // `--cfg=bun_standalone` in rustflags below so every crate can branch on it.
+    args.push("--features", "standalone");
+  }
   // std is compiled from source (cargoBuildStdArg) in every build: the link is bun's own and takes each crate's rlib
   // as the output of an edge (rust/units.ts linkedRlibs), so std's crates have to be units of the graph like the
   // rest; the toolchain's prebuilt std is not. It also gives:
@@ -425,6 +430,14 @@ export function cargoBuildInvocation(cfg: Config): CargoInvocation {
   rustflags.push("--check-cfg=cfg(bun_disallow_code_generation_from_strings)");
   if (!cfg.codeGenerationFromStrings) {
     rustflags.push("--cfg=bun_disallow_code_generation_from_strings");
+  }
+  // `bun_standalone`: reduced-footprint --compile runtime. Carried as a global
+  // cfg (not just the cargo feature) so any crate can `#[cfg(bun_standalone)]`
+  // without threading a feature through the workspace graph. The `standalone` feature
+  // on `bun_runtime` is still passed (above).
+  rustflags.push("--check-cfg=cfg(bun_standalone)");
+  if (cfg.standalone) {
+    rustflags.push("--cfg=bun_standalone");
   }
   // Drop `#[track_caller]` source-location capture in release. Every
   // `Option::unwrap`/`slice[i]`/`RefCell::borrow` etc. otherwise emits a
