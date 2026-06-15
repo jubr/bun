@@ -457,6 +457,7 @@ const configFlags: { [K in keyof Required<PartialConfig>]: ConfigFlagKind<NonNul
   unifiedSources: "boolean",
   archiveDeps: "boolean",
   timeTrace: "boolean",
+  standalone: "boolean",
   ci: "boolean",
   buildkite: "boolean",
   webkit: "string",

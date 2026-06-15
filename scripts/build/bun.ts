@@ -17,7 +17,7 @@ import type { Sources } from "../glob-sources.ts";
 import { binaryExpectations, exportList, shimExpectations } from "./binary-expectations.ts";
 import { emitCodegen, type CodegenOutputs } from "./codegen.ts";
 import { cc, cxx, link, pch } from "./compile.ts";
-import { bunExeName, shouldStrip, type Config } from "./config.ts";
+import { bunExeName, bunStrippedName, shouldStrip, type Config } from "./config.ts";
 import { generateDepVersionsHeader } from "./depVersionsHeader.ts";
 import { allDeps } from "./deps/index.ts";
 import { lolhtml } from "./deps/lolhtml.ts";
@@ -745,7 +745,7 @@ function emitSmokeTest(n: Ninja, cfg: Config, exe: string, exeName: string, stri
  * The profile binary keeps its symbols for profiling/debugging release crashes.
  */
 function emitStrip(n: Ninja, cfg: Config, inputExe: string, stripflags: string[]): string {
-  const out = resolve(cfg.buildDir, "bun" + cfg.exeSuffix);
+  const out = resolve(cfg.buildDir, bunStrippedName(cfg) + cfg.exeSuffix);
 
   // Windows: strip equivalent is handled at link time (/OPT:REF etc), no
   // separate strip binary. The "stripped" bun is just a copy. Copy command

@@ -66,6 +66,7 @@ export function generateBuildOptionsRs(cfg: CodegenFields): string {
     "// of this predicate.",
     "pub const ENABLE_LOGS: bool = cfg!(bun_debug);",
     "pub const ENABLE_ASAN: bool = cfg!(bun_asan);",
+    "pub const STANDALONE_BUILD: bool = cfg!(bun_standalone);",
     "pub const ENABLE_TINYCC: bool = !cfg!(any(",
     `    target_os = "android",`,
     `    target_os = "freebsd",`,
