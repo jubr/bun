@@ -104,7 +104,7 @@ extern "C" fn zig__renderDiff(
 ) {
     #[cfg(bun_standalone)]
     {
-        let _ = (expected_ptr, expected_len, received_ptr, received_len, global_this);
+        let _ = (expected_ptr, expected_len, received_ptr, received_len);
         return;
     }
     #[cfg(not(bun_standalone))]
