@@ -442,6 +442,9 @@ pub(crate) const BUILD_ONLY_PARAMS: &[ParamType] = concat_params!(
         parse_param!(
             "--asset <STR>...                 Embed a file or directory into the compiled executable, preserving its relative path (requires --compile)"
         ),
+        parse_param!(
+            "--compile-runtime <STR>          Which Bun runtime to embed: \"standalone\" (default, smaller) or \"full\""
+        ),
         parse_param!("--bytecode                       Use a bytecode cache"),
         parse_param!(
             "--bytecode-depth <NUMBER>        How many levels of nested functions to compile to bytecode ahead of time. Defaults to all"
@@ -2235,6 +2238,28 @@ fn parse_build_command_options(
     if args.flag(b"--compile") {
         ctx.bundler_options.compile = true;
         ctx.bundler_options.inline_entrypoint_import_meta_main = true;
+    }
+
+    if let Some(runtime) = args.option(b"--compile-runtime") {
+        if !ctx.bundler_options.compile {
+            Output::err_generic("--compile-runtime requires --compile", ());
+            Global::crash();
+        }
+        ctx.bundler_options.compile_target.runtime = match runtime {
+            b"standalone" => bun_options_types::compile_target::CompileRuntime::Standalone,
+            b"full" => bun_options_types::compile_target::CompileRuntime::Full,
+            _ => {
+                Output::err_generic(
+                    "--compile-runtime must be \"standalone\" or \"full\"",
+                    (),
+                );
+                Global::crash();
+            }
+        };
+    } else if ctx.bundler_options.compile {
+        // Default to the slim standalone runtime for `--compile` output.
+        ctx.bundler_options.compile_target.runtime =
+            bun_options_types::compile_target::CompileRuntime::Standalone;
     }
 
     if let Some(compile_exec_argv) = args.option(b"--compile-exec-argv") {
