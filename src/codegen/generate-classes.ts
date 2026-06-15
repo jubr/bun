@@ -1715,6 +1715,7 @@ function generateRust(
     structuredClone = false,
     rustPath,
     sharedThis = true,
+    standaloneStub = false,
   } = {} as ClassDefinition,
 ) {
   const gc_fields = Object.entries({
@@ -1728,8 +1729,33 @@ function generateRust(
   // placeholder, no `unimplemented!()` — a missing method is a compile error.
   const thunks: string[] = [];
   const symbols: string[] = [];
+  // standaloneStub: under `cfg(bun_standalone)` every thunk returns its zero
+  // value (throwing a TypeError first for JSValue/ptr returns that have a
+  // `global` in scope). The real `${T}::method` calls live behind
+  // `cfg(not(bun_standalone))` so the backing module can be cfg-gated out
+  // entirely while the C++ `extern` symbols still link.
+  const stubMsg =
+    typeof standaloneStub === "string" ? standaloneStub : `${typeName} is not available in standalone executables`;
+  function stubBody(sig: string): string {
+    const ret = /-> (.+)$/.exec(sig)?.[1]?.trim() ?? "()";
+    const hasGlobal = sig.includes("global: &JSGlobalObject");
+    const throwStmt = hasGlobal ? `let _ = global.throw_type_error(format_args!(${JSON.stringify(stubMsg)})); ` : ``;
+    if (ret === "JSValue") return throwStmt + "JSValue::ZERO";
+    if (ret === "*mut c_void") return throwStmt + "core::ptr::null_mut()";
+    if (ret === "bool") return throwStmt + "false";
+    if (ret === "usize") return "0";
+    if (ret === "()") return "";
+    return `unreachable!()`;
+  }
   function thunk(sym: string, sig: string, body: string) {
     symbols.push(sym);
+    if (standaloneStub) {
+      body =
+        `#[cfg(not(bun_standalone))]\n` +
+        `    { ${body.trim()} }\n` +
+        `    #[cfg(bun_standalone)]\n` +
+        `    { ${stubBody(sig)} }`;
+    }
     // Safe-body thunks: every pointer param is typed as `&`/`&mut` directly
     // (ABI-identical to `*const`/`*mut` for non-null inputs, which the C++
     // caller guarantees) and routed through a safe `host_fn::*` helper. The
@@ -2015,6 +2041,21 @@ ${cachedExterns}
 ${gcAccessors}
 }`;
 
+  const typeDecl = standaloneStub
+    ? `/// Native backing type for \`JS${typeName}.m_ctx\`. Re-export of the real
+/// struct under \`cfg(not(bun_standalone))\`; ZST stub under \`cfg(bun_standalone)\`
+/// so every thunk below still links while \`${rustPath}\` is cfg-gated out.
+#[cfg(not(bun_standalone))]
+#[allow(dead_code, unreachable_pub, unused)]
+pub(crate) use ${rustPath} as ${typeName};
+#[cfg(bun_standalone)]
+pub(crate) struct ${typeName};`
+    : `/// Native backing type for \`JS${typeName}.m_ctx\`. Re-export of the real
+/// struct so the thunks below call its inherent methods directly. A missing
+/// method is a compile error — fix it in \`${rustPath}\`, not here.
+#[allow(dead_code, unreachable_pub, unused)]
+pub(crate) use ${rustPath} as ${typeName};`;
+
   return {
     symbols,
     rustPath,
@@ -2023,11 +2064,7 @@ ${gcAccessors}
 // ${typeName}
 // ════════════════════════════════════════════════════════════════════════════
 
-/// Native backing type for \`JS${typeName}.m_ctx\`. Re-export of the real
-/// struct so the thunks below call its inherent methods directly. A missing
-/// method is a compile error — fix it in \`${rustPath}\`, not here.
-#[allow(dead_code, unreachable_pub, unused)]
-pub(crate) use ${rustPath} as ${typeName};
+${typeDecl}
 
 ${thunks.join("\n\n")}
 
