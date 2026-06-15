@@ -3,12 +3,14 @@
 // ─── server / socket / ffi ───────────────────────────────────────────────────
 pub(crate) use crate::server;
 pub(crate) use crate::server::AnyRequestContext;
+#[cfg_attr(bun_standalone, allow(unused_imports))]
 pub(crate) use crate::server::AnyServer;
 pub(crate) use crate::server::DebugHTTPSServer;
 pub(crate) use crate::server::DebugHTTPServer;
 pub(crate) use crate::server::HTMLBundle;
 pub(crate) use crate::server::HTTPSServer;
 pub(crate) use crate::server::HTTPServer;
+#[cfg_attr(bun_standalone, allow(unused_imports))]
 pub(crate) use crate::server::SavedRequest;
 
 pub(crate) use crate::socket;

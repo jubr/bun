@@ -967,6 +967,7 @@ impl JSValue {
     /// `JSValue.asInternalPromise()` — downcast to `JSInternalPromise`.
     /// Returns a raw pointer; see
     /// [`as_promise`] for the aliasing rationale.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn as_internal_promise(self) -> Option<*mut JSInternalPromise> {
         if !self.is_cell() {
             return None;

@@ -30,6 +30,7 @@ use bun_which::which;
 use crate::cli;
 use crate::cli::arguments;
 use crate::cli::command::{ContextData, Tag as CommandTag};
+#[cfg(not(bun_standalone))]
 use crate::cli::shell_completions::ShellCompletions;
 
 bun_core::declare_scope!(RUN_LOG, visible);
@@ -240,8 +241,22 @@ Full documentation is available at <magenta>https://bun.com/docs/cli/run<r>
         copy_script: &mut Vec<u8>,
         script: &[u8],
     ) -> crate::Result<()> {
-        bun_install::lifecycle_script_runner::replace_package_manager_run(copy_script, script)
-            .map_err(Into::into)
+        #[cfg(not(bun_standalone))]
+        return bun_install::lifecycle_script_runner::replace_package_manager_run(
+            copy_script,
+            script,
+        )
+        .map_err(Into::into);
+        // Standalone runtime never runs package.json lifecycle scripts (a
+        // compiled exe boots its embedded entry); the bare `bun-standalone`
+        // debugging binary keeps `bun run <script>` working but skips the
+        // `npm/yarn/pnpm run` → `bun run` rewrite to avoid linking
+        // `bun_install::lifecycle_script_runner`.
+        #[cfg(bun_standalone)]
+        {
+            copy_script.extend_from_slice(script);
+            Ok(())
+        }
     }
 
     /// Spawns the script body via the bun-shell or system shell and exits on
@@ -1937,8 +1952,23 @@ impl RunCommand {
         path: &mut Vec<u8>,
         optional_bun_path: &mut &[u8],
     ) -> crate::Result<()> {
-        bun_install::RunCommand::create_fake_temporary_node_executable(path, optional_bun_path)
-            .map_err(Into::into)
+        #[cfg(not(bun_standalone))]
+        return bun_install::RunCommand::create_fake_temporary_node_executable(
+            path,
+            optional_bun_path,
+        )
+        .map_err(Into::into);
+        // Standalone runtime: skip creating the `/tmp/bun-node*/node` shim.
+        // The bare `bun-standalone` binary's `bun run <script>` path still
+        // prepends `.bin` dirs to PATH; child `node` invocations resolve to
+        // the system node (or fail) instead of bun — acceptable for the
+        // debugging-only bare-binary case, and a compiled exe never reaches
+        // this path at all.
+        #[cfg(bun_standalone)]
+        {
+            let _ = (path, optional_bun_path);
+            Ok(())
+        }
     }
 
     /// Prepends workspace
@@ -2137,7 +2167,7 @@ impl RunCommand {
         // wrapper exe.  we build the full exe path even though we could do
         // a relative lookup, because in the case we do find it, we have to
         // generate this full path anyways.
-        #[cfg(windows)]
+        #[cfg(all(windows, not(bun_standalone)))]
         if bun_core::FeatureFlags::WINDOWS_BUNX_FAST_PATH && executable.ends_with(b".exe") {
             debug_assert!(paths::is_absolute(executable));
 
@@ -2706,7 +2736,7 @@ impl RunCommand {
 
         // ── Windows .bunx fast-path ──────────────────────────────────────────
         // With `--check` the way below is taken, on which the project is checked.
-        #[cfg(windows)]
+        #[cfg(all(windows, not(bun_standalone)))]
         if bun_core::FeatureFlags::WINDOWS_BUNX_FAST_PATH && !ctx.runtime_options.check {
             // SAFETY: process-lifetime static, single-threaded CLI dispatch.
             let buf = unsafe { &mut *bunx_fast_path_buffers::DIRECT_LAUNCH_BUFFER.get() };
@@ -3704,6 +3734,7 @@ impl RunCommand {
 
     /// Shell-completion entries for `bun run`. Called from
     /// `cli_body::bun_getcompletes`.
+    #[cfg(not(bun_standalone))]
     pub(crate) fn completions<const FILTER: Filter>(
         ctx: &mut ContextData,
         default_completions: Option<&'static [&'static [u8]]>,
@@ -4139,6 +4170,7 @@ impl BunXFastPath {
     }
 
     /// If this returns, it implies the fast path cannot be taken.
+    #[cfg(all(windows, not(bun_standalone)))]
     pub(crate) fn try_launch(
         ctx: &mut ContextData,
         path_len: usize,
@@ -4222,6 +4254,7 @@ impl BunXFastPath {
         bun_core::scoped_log!(BUNX_FAST_PATH_LOG, "did not start via shim");
     }
 
+    #[cfg(all(windows, not(bun_standalone)))]
     fn direct_launch_callback(wpath: &mut [u16], ctx: bun_options_types::context::Context<'_>) {
         // SAFETY: process-lifetime static, single-threaded CLI dispatch.
         // `try_launch` (still on the call stack) holds live `&mut [u16]`

@@ -98,6 +98,7 @@ pub(crate) struct RuntimeState {
     pub(crate) body_value_pool: Box<core::mem::ManuallyDrop<crate::webcore::body::HiveAllocator>>,
     /// The resolver's PackageManager wake-handler context (module queue + VM
     /// handle); the resolver holds a raw pointer to it. Freed with the state.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) wake_ctx: Option<Box<bun_jsc::async_module::WakeContext>>,
     /// In-process `Bun.cron()` jobs that `--hot` reload / worker teardown must
     /// stop; one ref per entry, released by `CronJob::remove_from_list` /

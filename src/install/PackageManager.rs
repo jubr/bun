@@ -3254,6 +3254,7 @@ fn init_with_runtime_once(
 /// Without a lockfile, auto-install reads the project's package.json the way `bun install` does,
 /// for its overrides, catalogs and workspaces. Each dependency is only resolved when it is
 /// imported.
+#[cfg(not(bun_standalone))]
 fn parse_runtime_root(
     manager: &mut PackageManager,
     log: &mut bun_ast::Log,

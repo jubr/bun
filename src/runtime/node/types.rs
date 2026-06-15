@@ -330,6 +330,7 @@ impl StringOrBuffer<'static> {
         }
     }
 
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn from_js_to_owned_slice(
         global_object: &JSGlobalObject,
         value: JSValue,

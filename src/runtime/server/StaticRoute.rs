@@ -39,6 +39,7 @@ pub(crate) struct StaticRoute {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(bun_standalone, allow(dead_code))]
 pub(crate) struct InitFromBytesOptions<'a> {
     pub(crate) server: Option<AnyServer>,
     pub(crate) mime_type: Option<&'a MimeType>,
@@ -76,6 +77,7 @@ impl StaticRoute {
     }
 
     /// Ownership of `blob` is transferred to this function.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn init_from_any_blob(
         blob: AnyBlob,
         options: InitFromBytesOptions<'_>,
@@ -129,6 +131,7 @@ impl StaticRoute {
     }
 
     /// Create a static route to be used on a single response, freeing the bytes once sent.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn send_blob_then_deinit(
         resp: AnyResponse,
         blob: AnyBlob,
@@ -477,6 +480,7 @@ impl StaticRoute {
         self.do_write_headers(resp);
     }
 
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn on_with_method(this: ThisPtr<Self>, method: Method, resp: AnyResponse) {
         match method {
             Method::GET => Self::on(this, resp),

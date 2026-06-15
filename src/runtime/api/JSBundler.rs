@@ -1472,6 +1472,18 @@ pub(crate) mod js_bundler {
         pub(crate) keep_names: bool,
     }
 
+    #[cfg(bun_standalone)]
+    fn build(
+        global_this: &JSGlobalObject,
+        _context: jsc::ContextId,
+        _arguments: &[JSValue],
+    ) -> JsResult<JSValue> {
+        Err(global_this.throw(format_args!(
+            "Bun.build is not available in standalone executables. Install Bun: https://bun.com/get"
+        )))
+    }
+
+    #[cfg(not(bun_standalone))]
     fn build(
         global_this: &JSGlobalObject,
         context: jsc::ContextId,

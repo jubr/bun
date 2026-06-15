@@ -3,6 +3,11 @@
 //! server, server components, and other integrations. Instead of taking the
 //! role as a framework, Bake is tool for frameworks to build on top of.
 
+// AIDEV-NOTE: under `bun_standalone` the DevServer is replaced by the uninhabited stub below, so
+// everything that is only reachable through it (production builds, framework config, ...) is
+// unreferenced and the linker drops it. The lints cannot see that, hence the blanket allow.
+#![cfg_attr(bun_standalone, allow(dead_code, unused_imports, unused_variables))]
+
 use bun_core::Output;
 
 pub(crate) mod router;
@@ -75,6 +80,10 @@ pub(crate) fn print_warning() {
 // ══════════════════════════════════════════════════════════════════════════
 // DevServer
 // ══════════════════════════════════════════════════════════════════════════
+#[cfg(not(bun_standalone))]
+pub(crate) mod dev_server;
+#[cfg(bun_standalone)]
+#[path = "dev_server_standalone_stub.rs"]
 pub(crate) mod dev_server;
 pub(crate) use dev_server as DevServer;
 pub(crate) use dev_server::{
