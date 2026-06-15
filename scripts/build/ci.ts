@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { isBuildkite, markBuildkiteStepReported, reportAnnotationToBuildkite } from "../buildkite.ts";
 import { formatAnnotationToHtml, parseAnnotations } from "./annotations.ts";
 import { bunExeName, shouldStrip, type BunOutput } from "./bun.ts";
-import type { Config } from "./config.ts";
+import { bunStrippedName, type Config } from "./config.ts";
 import { webkitTestFFIPath } from "./deps/webkit.ts";
 import { BuildError } from "./error.ts";
 import { crossFeaturesJson } from "./features-json.ts";
@@ -276,7 +276,7 @@ const TIMINGS_META_DATA = "timings:";
  * cmake's bunTriplet — any drift breaks test-step downloads.
  */
 export function computeBunTriplet(cfg: Config): string {
-  let t = `bun-${cfg.os}-${cfg.arch}`;
+  let t = `${bunStrippedName(cfg)}-${cfg.os}-${cfg.arch}`;
   if (cfg.abi === "musl") t += "-musl";
   if (cfg.abi === "android") t += "-android";
   // No `-baseline` suffix: x64 is always baseline and the historical
@@ -323,7 +323,11 @@ export function packageAndUpload(cfg: Config, output: BunOutput): void {
   // cmake's bunPath: string(REPLACE bun ${bunTriplet} bunPath ${bun})
   // where ${bun} is the target name (bun-profile, bun-asan, ...).
   // Result: bun-linux-x64-profile, bun-linux-x64-asan, etc.
-  const bunPath = exeName.replace(/^bun/, bunTriplet);
+  // Replace the *base* name (bun / bun-standalone), not just /^bun/, so
+  // `bun-standalone-profile` → `bun-standalone-linux-x64-profile` rather than
+  // `bun-standalone-linux-x64-standalone-profile`.
+  const baseName = bunStrippedName(cfg);
+  const bunPath = bunTriplet + exeName.slice(baseName.length);
   const files: string[] = [basename(exe), "features.json"];
   const testFFI = webkitTestFFIPath(cfg);
   if (existsSync(testFFI)) {

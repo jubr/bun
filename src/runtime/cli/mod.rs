@@ -4,6 +4,15 @@
 //! against lower-tier crates. `Command::start()` (full dispatch) and
 //! per-command exec bodies live in the sibling `*_command.rs` modules.
 
+// Under `bun_standalone` the toolkit dispatch arms are compiled out (see the
+// `cfg(bun_standalone)` match in `Command::start`), which orphans most
+// `*_command` module contents. The modules stay declared so the few items the
+// runtime still reaches (`upgrade_command::FileSystemTmpdirExt`,
+// `upgrade_command::Bun__githubURL`, codegen js2native thunks) keep linking;
+// the rest is dropped by `--gc-sections`. The non-standalone build still
+// enforces `dead_code = "deny"`.
+#![cfg_attr(bun_standalone, allow(dead_code, unused_macros, unused_imports))]
+
 use bun_core::strings;
 use bun_core::{self as bun, Global, Output};
 use bun_core::{pretty, pretty_error, pretty_errorln};
@@ -1124,6 +1133,27 @@ pub(crate) mod command {
         // live and honours `stop_after_positional_at = 1` — the shim broke
         // `bun <bin> --version` by intercepting the flag meant for `<bin>`.
 
+        // ─── bun-standalone ─────────────────────────────────────────────────
+        // The reduced-footprint --compile runtime only carries the run path:
+        // a real --compile output returns via `boot_standalone` above and
+        // never reaches this match. The bare `bun-standalone` binary (CI
+        // smoke test, `BUN_BE_BUN=1`, debugging) keeps Auto/Run/RunAsNode/
+        // Exec/Repl/Help working; every toolkit subcommand surfaces an
+        // explicit error so the dispatch arm below — and the `*_command`
+        // modules it references — can be compiled out for `--gc-sections`.
+        #[cfg(bun_standalone)]
+        return match tag {
+            Tag::AutoCommand | Tag::RunCommand => exec_auto_or_run(tag, log),
+            Tag::HelpCommand => HelpCommand::exec(),
+            Tag::ReservedCommand => ReservedCommand::exec(),
+            Tag::DiscordCommand => super::discord_command::DiscordCommand::exec(),
+            Tag::RunAsNodeCommand => exec_run_as_node(log),
+            Tag::ExecCommand => exec_exec(log),
+            Tag::ReplCommand => exec_repl(log),
+            other => crate::standalone_build::unavailable_command(tag_name(other)),
+        };
+
+        #[cfg(not(bun_standalone))]
         match tag {
             Tag::AutoCommand | Tag::RunCommand => exec_auto_or_run(tag, log),
             Tag::HelpCommand => HelpCommand::exec(),
@@ -1161,6 +1191,48 @@ pub(crate) mod command {
             Tag::UpgradeCommand => exec_upgrade(log),
             Tag::ExecCommand => exec_exec(log),
             Tag::FuzzilliCommand => exec_fuzzilli(log),
+        }
+    }
+
+    /// User-facing subcommand name for the standalone "not available" error.
+    /// Only the toolkit tags need entries; runtime tags never reach the stub.
+    #[cfg(bun_standalone)]
+    fn tag_name(tag: Tag) -> &'static [u8] {
+        match tag {
+            Tag::BuildCommand => b"build",
+            Tag::TestCommand => b"test",
+            Tag::InstallCommand => b"install",
+            Tag::AddCommand => b"add",
+            Tag::RemoveCommand => b"remove",
+            Tag::UpdateCommand => b"update",
+            Tag::UpdateInteractiveCommand => b"update --interactive",
+            Tag::LinkCommand => b"link",
+            Tag::UnlinkCommand => b"unlink",
+            Tag::PackageManagerCommand => b"pm",
+            Tag::OutdatedCommand => b"outdated",
+            Tag::PublishCommand => b"publish",
+            Tag::PatchCommand => b"patch",
+            Tag::PatchCommitCommand => b"patch --commit",
+            Tag::AuditCommand => b"audit",
+            Tag::WhyCommand => b"why",
+            Tag::InfoCommand => b"info",
+            Tag::InitCommand => b"init",
+            Tag::CreateCommand => b"create",
+            Tag::BunxCommand => b"x",
+            Tag::UpgradeCommand => b"upgrade",
+            Tag::InstallCompletionsCommand => b"completions",
+            Tag::GetCompletionsCommand => b"getcompletes",
+            Tag::FuzzilliCommand => b"fuzzilli",
+            // Runtime tags — handled before the stub arm; listed for
+            // exhaustiveness only.
+            Tag::AutoCommand
+            | Tag::RunCommand
+            | Tag::RunAsNodeCommand
+            | Tag::HelpCommand
+            | Tag::ReservedCommand
+            | Tag::DiscordCommand
+            | Tag::ExecCommand
+            | Tag::ReplCommand => b"<unreachable>",
         }
     }
 
@@ -1311,6 +1383,7 @@ pub(crate) mod command {
             return run_command::RunCommand::exec_eval(ctx);
         }
 
+        #[cfg(not(bun_standalone))]
         if tag == Tag::AutoCommand && ctx.args.entry_points.len() == 1 {
             let extension = bun_paths::extension(&ctx.args.entry_points[0]);
             if extension == b".lockb" {
@@ -1345,6 +1418,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_init() -> CmdResult {
@@ -1353,6 +1427,7 @@ pub(crate) mod command {
         super::init_command::InitCommand::exec(&argv[2.min(argv.len())..])
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_install_completions() -> CmdResult {
@@ -1377,6 +1452,7 @@ pub(crate) mod command {
         run_command::RunCommand::exec_as_if_node(ctx)
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_bunx(log: &mut bun_ast::Log) -> CmdResult {
@@ -1398,6 +1474,7 @@ pub(crate) mod command {
         super::repl_command::ReplCommand::exec(ctx)
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_build(log: &mut bun_ast::Log) -> CmdResult {
@@ -1406,6 +1483,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_check(log: &mut bun_ast::Log) -> CmdResult {
@@ -1500,6 +1578,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_fuzzilli(log: &mut bun_ast::Log) -> CmdResult {
@@ -1524,6 +1603,7 @@ pub(crate) mod command {
             )*
         };
     }
+    #[cfg(not(bun_standalone))]
     cold_exec! {
         exec_pm                 => (PackageManagerCommand, super::package_manager_command::PackageManagerCommand::exec),
         exec_install            => (InstallCommand,        super::install_command::InstallCommand::exec),
@@ -1577,6 +1657,7 @@ pub(crate) mod command {
         b"help",
     ];
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_getcompletes(log: &mut bun_ast::Log) -> crate::Result<()> {
@@ -1690,6 +1771,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_create(log: &mut bun_ast::Log) -> crate::Result<()> {
@@ -1822,6 +1904,7 @@ To create a project with the official Next.js scaffolding tool, run
     }
 
     /// `bun ./bun.lockb` — print lockfile as yarn.lock (or its hash with `--hash`).
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_lockb(ctx: &mut ContextData) -> crate::Result<()> {
@@ -1856,6 +1939,7 @@ To create a project with the official Next.js scaffolding tool, run
         Printer::print(log, entry).map_err(Into::into)
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_info(log: &mut bun_ast::Log) -> crate::Result<()> {
