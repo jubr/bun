@@ -20,14 +20,14 @@
 /// True for the `bun-standalone` binary. Same as
 /// `bun_core::build_options::STANDALONE_BUILD`.
 #[allow(dead_code)]
-pub const IS_STANDALONE: bool = cfg!(bun_standalone);
+pub(crate) const IS_STANDALONE: bool = cfg!(bun_standalone);
 
 /// Print the "not available in this binary" error for a CLI subcommand and
 /// exit non-zero. Used by the `cfg(bun_standalone)` dispatch arm in
 /// `cli::Command::start()`.
 #[cold]
 #[allow(dead_code)]
-pub fn unavailable_command(name: &[u8]) -> ! {
+pub(crate) fn unavailable_command(name: &[u8]) -> ! {
     bun_core::pretty_errorln!(
         "<r><red>error<r><d>:<r> <b>bun {}<r> is not available in this executable",
         bstr::BStr::new(name),

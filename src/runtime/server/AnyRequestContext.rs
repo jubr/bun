@@ -152,6 +152,7 @@ macro_rules! dispatch {
 }
 
 impl AnyRequestContext {
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn set_additional_on_abort_callback(self, cb: Option<AdditionalOnAbortCallback>) {
         dispatch!(self, (), |_T, ctx| {
             if let Some(old) = ctx.additional_on_abort.replace(cb) {
@@ -218,6 +219,7 @@ impl AnyRequestContext {
         dispatch!(self, (), |_T, ctx| ctx.ref_())
     }
 
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn set_signal_aborted(self, reason: crate::server::jsc::CommonAbortReason) {
         dispatch!(self, (), |_T, ctx| ctx.set_signal_aborted(reason))
     }
@@ -235,6 +237,7 @@ impl AnyRequestContext {
         dispatch!(self, (), |_T, ctx| ctx.deref())
     }
 
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn end_with_internal_server_error(self) {
         dispatch!(self, (), |_T, ctx| ctx.end_with_internal_server_error())
     }

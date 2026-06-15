@@ -85,10 +85,10 @@ pub(crate) mod valkey_jsc;
 // Surface those names here
 // so `*_command.rs` and `test/parallel/*.rs` files resolve their
 // `use crate::…` lines without per-file edits.
-pub(crate) use cli::{
-    Cli, Command, command, filter_arg, run_command, shell_completions, test_command,
-};
+#[cfg_attr(bun_standalone, allow(unused_imports))]
+pub(crate) use cli::Cli;
+pub(crate) use cli::{Command, command, filter_arg, run_command, test_command};
 #[cfg(not(bun_standalone))]
-pub(crate) use cli::{build_command, package_manager_command};
+pub(crate) use cli::{build_command, package_manager_command, shell_completions};
 
 pub(crate) mod webview;
