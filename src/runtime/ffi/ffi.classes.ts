@@ -3,6 +3,7 @@ import { define } from "../../codegen/class-definitions.ts";
 export default [
   define({
     name: "FFI",
+    standaloneStub: "bun:ffi is not available in standalone executables",
     construct: true,
     noConstructor: true,
     finalize: true,

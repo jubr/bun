@@ -8,7 +8,11 @@
 
 // ─── implementation modules ──────────────────────────────────────────────────
 
+#[cfg(not(bun_standalone))]
 #[path = "ffi_body.rs"]
+mod ffi_body;
+#[cfg(bun_standalone)]
+#[path = "ffi_standalone_stub.rs"]
 mod ffi_body;
 
 /// `js2native` codegen resolves `$rust(ffi.rs, Bun__FFI__cc)` to
@@ -100,6 +104,7 @@ mod dom_call_slowpath {
 ///
 /// Note: never fails — `Vec` write! is infallible and the POSIX path is
 /// unconditional.
+#[cfg(not(bun_standalone))]
 pub(crate) fn get_dl_error() -> Box<[u8]> {
     #[cfg(windows)]
     {
@@ -131,6 +136,7 @@ pub(crate) fn get_dl_error() -> Box<[u8]> {
 // so this MUST be the same type that `to_js()` boxes into the wrapper.
 // ═════════════════════════════════════════════════════════════════════════════
 
+#[cfg(not(bun_standalone))]
 pub(crate) use ffi_body::FFI;
 
 // The full `CompileC`/`Source`/`SymbolsMap`/`StringArray`/`CompilerRT` port
@@ -140,4 +146,5 @@ pub(crate) use ffi_body::FFI;
 // ═════════════════════════════════════════════════════════════════════════════
 // ABIType — single source of truth lives in abi_type.rs
 // ═════════════════════════════════════════════════════════════════════════════
+#[cfg(not(bun_standalone))]
 mod abi_type;
