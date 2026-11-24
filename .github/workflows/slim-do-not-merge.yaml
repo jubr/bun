@@ -1,0 +1,23 @@
+name: slim-do-not-merge
+
+# `slim` -> `bun-vX.Y.Z` is a permanent draft pull request that shows the patch set against the upstream tag it sits on
+# (README.md); the base branch bun-vX.Y.Z is that tag. It must never merge. `main` is checked too, where the PR used to
+# point. This check fails on it on purpose, next to GitHub's own draft state.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+    branches:
+      - main
+      - "bun-v*"
+
+permissions: {}
+
+jobs:
+  never:
+    name: never merge slim into main or a bun-v* branch
+    if: github.head_ref == 'slim'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "::error::slim is a permanent draft PR. main and bun-v* mirror oven-sh/bun and never receive the patch set."
+          exit 1
