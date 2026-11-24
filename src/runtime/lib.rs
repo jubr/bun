@@ -74,6 +74,10 @@ pub(crate) mod generated_js2native; // include!()s ${BUN_CODEGEN_DIR}/generated_
 pub(crate) mod generated_jssink; // include!()s ${BUN_CODEGEN_DIR}/generated_jssink.rs
 
 pub(crate) mod dns_jsc;
+#[cfg(not(bun_standalone))]
+pub(crate) mod image;
+#[cfg(bun_standalone)]
+#[path = "image_standalone_stub.rs"]
 pub(crate) mod image;
 #[cfg_attr(bun_standalone, allow(dead_code))]
 pub(crate) mod test_runner;
