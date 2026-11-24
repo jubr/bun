@@ -3,6 +3,7 @@ import { define } from "../../codegen/class-definitions.ts";
 export default [
   define({
     name: "Image",
+    standaloneStub: "Bun.Image is not available in standalone executables",
     construct: true,
     constructNeedsThis: true,
     finalize: true,

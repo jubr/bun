@@ -1533,6 +1533,12 @@ fn get_archive_constructor(global_this: &JSGlobalObject, _: &JSObject) -> JSValu
     jsc::codegen::js::get_constructor::<crate::api::archive::Archive>(global_this)
 }
 
+#[cfg(bun_standalone)]
+fn get_image_constructor(_: &JSGlobalObject, _: &JSObject) -> JSValue {
+    JSValue::UNDEFINED
+}
+
+#[cfg(not(bun_standalone))]
 fn get_image_constructor(global_this: &JSGlobalObject, _: &JSObject) -> JSValue {
     jsc::codegen::js::get_constructor::<crate::image::Image>(global_this)
 }
