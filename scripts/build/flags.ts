@@ -269,7 +269,7 @@ export const globalFlags: Flag[] = [
     desc: "No optimization (debug)",
   },
   {
-    flag: "-Os",
+    flag: "-Oz",
     when: c => c.unix && c.smol,
     desc: "Optimize for size (MinSizeRel)",
   },
