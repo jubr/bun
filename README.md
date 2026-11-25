@@ -10,7 +10,7 @@ smaller Bun runtimes, meant as the executable that `bun build --compile --compil
   See [docs/slim/bun-slim.md](docs/slim/bun-slim.md).
 
 <!-- slim-sizes:start -->
-**Latest build: [bun-slim-v1.4.5-0](https://github.com/jubr/bun-slim/releases/tag/bun-slim-v1.4.5-0)** (size of the stripped executable)
+**Latest build: [bun-slim-v1.4.5-1](https://github.com/jubr/bun-slim/releases/tag/bun-slim-v1.4.5-1)** (size of the stripped executable)
 
 | Target | Upstream Bun | `bun-alone` | vs. upstream | `bun-slim` | vs. upstream |
 | --- | ---: | ---: | ---: | ---: | ---: |
