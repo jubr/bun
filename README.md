@@ -10,7 +10,14 @@ smaller Bun runtimes, meant as the executable that `bun build --compile --compil
   See [docs/slim/bun-slim.md](docs/slim/bun-slim.md).
 
 <!-- slim-sizes:start -->
-_No release yet: the size table appears here with the first one._
+**Latest build: [bun-slim-v1.4.5-0](https://github.com/jubr/bun-slim/releases/tag/bun-slim-v1.4.5-0)** (size of the stripped executable)
+
+| Target | Upstream Bun | `bun-alone` | vs. upstream | `bun-slim` | vs. upstream |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| linux-x64 | 102.7 MiB | 75.1 MiB | -26.9% | 65.2 MiB | -36.5% |
+| linux-arm64 | 102.7 MiB | 73.2 MiB | -28.7% | 62.0 MiB | -39.6% |
+| darwin-x64 | 93.3 MiB | 64.9 MiB | -30.4% | 54.4 MiB | -41.7% |
+| darwin-arm64 | 85.2 MiB | 55.7 MiB | -34.7% | 47.0 MiB | -44.9% |
 <!-- slim-sizes:end -->
 
 Nothing here replaces Bun. If you want Bun, use [oven-sh/bun](https://github.com/oven-sh/bun) (its README is [README.BUN.md](README.BUN.md)).
