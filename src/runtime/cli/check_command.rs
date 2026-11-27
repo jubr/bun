@@ -17,6 +17,13 @@ use bun_sema_driver::{
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
+/// `--check` in a standalone executable: the type checker is not part of it (see `standalone_build`).
+#[cfg(bun_standalone)]
+#[cold]
+fn unavailable() -> ! {
+    crate::standalone_build::unavailable_command(b"--check")
+}
+
 pub(crate) struct CheckCommand;
 
 #[derive(Default)]
@@ -437,6 +444,12 @@ impl CheckCommand {
 
     /// `bun --check` without an entry point behaves like `bun check` without arguments. `bun` has
     /// already parsed its own arguments.
+    #[cfg(bun_standalone)]
+    pub(crate) fn exec_without_arguments() -> ! {
+        unavailable()
+    }
+
+    #[cfg(not(bun_standalone))]
     pub(crate) fn exec_without_arguments() -> ! {
         Self::exec_with(&Options {
             command_line: CommandLine {
@@ -544,6 +557,12 @@ impl<'a> EntryPoint<'a> {
 
 /// Type-checks `entry_points` and everything they import before they run. Returns true if there are
 /// no errors. Errors go to stderr, so stdout stays the program's.
+#[cfg(bun_standalone)]
+pub(crate) fn check_before(_entry_points: &[EntryPoint], _before_read: Option<BeforeRead>) -> bool {
+    unavailable()
+}
+
+#[cfg(not(bun_standalone))]
 pub(crate) fn check_before(entry_points: &[EntryPoint], before_read: Option<BeforeRead>) -> bool {
     let cwd = working_directory();
     // `--loader`, `--conditions`
@@ -600,6 +619,12 @@ fn has_types_with(by_extension: &[(Vec<u8>, ScriptKind)], path: &[u8]) -> bool {
 /// before the check reads it, so a change during the check restarts the process just like a later
 /// change. This covers every file outside `node_modules`, including type-only files and
 /// configuration files. Returns `None` if there's no file watcher.
+#[cfg(bun_standalone)]
+pub(crate) fn watching(_vm: &bun_jsc::virtual_machine::VirtualMachine) -> Option<BeforeRead> {
+    None
+}
+
+#[cfg(not(bun_standalone))]
 pub(crate) fn watching(vm: &bun_jsc::virtual_machine::VirtualMachine) -> Option<BeforeRead> {
     use bun_paths::{platform::Auto, resolve_path::join_abs_string};
     use bun_sema_driver::host::to_native;
@@ -627,11 +652,23 @@ fn already_read(cwd: &[u8], sources: &mut dyn Iterator<Item = (&[u8], &[u8])>) -
 }
 
 /// `BundleOptions::type_check` for `bun build --check`.
+#[cfg(bun_standalone)]
+pub(crate) fn check_for_build_command(_checked: TypeChecked, _log: &mut bun_ast::Log) -> bool {
+    unavailable()
+}
+
+#[cfg(not(bun_standalone))]
 pub(crate) fn check_for_build_command(checked: TypeChecked, log: &mut bun_ast::Log) -> bool {
     check_for_build(checked, log, true)
 }
 
 /// `BundleOptions::type_check` for `Bun.build({ check: true })`. Prints nothing.
+#[cfg(bun_standalone)]
+pub(crate) fn check_for_bun_build(_checked: TypeChecked, _log: &mut bun_ast::Log) -> bool {
+    unavailable()
+}
+
+#[cfg(not(bun_standalone))]
 pub(crate) fn check_for_bun_build(checked: TypeChecked, log: &mut bun_ast::Log) -> bool {
     check_for_build(checked, log, false)
 }
@@ -836,6 +873,12 @@ fn imports_of_page(cwd: &[u8], page: &[u8]) -> Vec<Vec<u8>> {
 
 /// Type-checks the project containing the working directory, like `bun check`, before running one
 /// of its scripts or `bun bake`'s app. For `before_read`, see `watching`.
+#[cfg(bun_standalone)]
+pub(crate) fn check_project_before(_before_read: Option<BeforeRead>) -> bool {
+    unavailable()
+}
+
+#[cfg(not(bun_standalone))]
 pub(crate) fn check_project_before(before_read: Option<BeforeRead>) -> bool {
     let provided = Provided {
         before_read,
