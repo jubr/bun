@@ -1802,6 +1802,7 @@ impl<'a, const TYPESCRIPT: bool, const SCAN_ONLY: bool> P<'a, TYPESCRIPT, SCAN_O
 
         if let Some(pending) = rc_pending
             && p.react_compiler_may_replace_body
+            && cfg!(not(bun_standalone))
             && let Some(mut rc) = p.react_compiler.take()
         {
             let name = pending
