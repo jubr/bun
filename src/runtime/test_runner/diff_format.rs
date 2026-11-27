@@ -102,6 +102,13 @@ extern "C" fn zig__renderDiff(
     received_ptr: *const core::ffi::c_char,
     received_len: usize,
 ) {
+    #[cfg(bun_standalone)]
+    {
+        let _ = (expected_ptr, expected_len, received_ptr, received_len);
+        return;
+    }
+    #[cfg(not(bun_standalone))]
+    {
     // SAFETY: caller (BunAnalyzeTranspiledModule.cpp) passes a valid UTF-8 buffer
     // of length `expected_len` that outlives this call.
     let expected = unsafe { bun_core::ffi::slice(expected_ptr.cast::<u8>(), expected_len) };
@@ -110,4 +117,5 @@ extern "C" fn zig__renderDiff(
     let received = unsafe { bun_core::ffi::slice(received_ptr.cast::<u8>(), received_len) };
     let formatter = DiffFormatter::from_strings(received, expected, false);
     let _ = bun_core::output::error_writer().print(format_args!("DIFF:\n{}\n", formatter));
+    }
 }

@@ -754,8 +754,17 @@ impl AnyRoute {
         argument: JSValue,
         init_ctx: &mut ServerInitContext,
     ) -> JsResult<Option<AnyRoute>> {
-        use bun_collections::zig_hash_map::MapEntry as StdEntry;
         if let Some(html_bundle) = argument.as_class_this_ptr::<HTMLBundle>() {
+            #[cfg(bun_standalone)]
+            {
+                let _ = html_bundle;
+                return Err(init_ctx.global.throw_type_error(format_args!(
+                    "Serving HTML routes requires the bundler, which is not available in standalone executables"
+                )));
+            }
+            #[cfg(not(bun_standalone))]
+            {
+            use bun_collections::zig_hash_map::MapEntry as StdEntry;
             let entry = init_ctx
                 .dedupe_html_bundle_map
                 .entry(html_bundle.as_ptr().cast_const());
@@ -771,6 +780,7 @@ impl AnyRoute {
                 }
                 StdEntry::Occupied(o) => AnyRoute::Html(RefPtr::from_this(o.get().this_ptr())),
             }));
+            }
         }
 
         if let Some(html_route) = Self::bundled_html_manifest_from_js(argument, init_ctx)? {
@@ -1115,6 +1125,8 @@ impl ServePlugins {
                 )));
             }
         }
+        #[cfg(bun_standalone)]
+        let _ = dev_server;
     }
 
     pub(crate) fn handle_on_reject(&mut self, global: &JSGlobalObject, err: JSValue) {
@@ -1139,6 +1151,8 @@ impl ServePlugins {
                 bun_core::handle_oom(dev.on_plugins_rejected());
             }
         }
+        #[cfg(bun_standalone)]
+        let _ = dev_server;
 
         Output::err_generic("Failed to load plugins for Bun.serve:", ());
         global.bun_vm().as_mut().run_error_handler(err, None);
@@ -1967,6 +1981,7 @@ where
         }
 
         // These get re-applied when we set the static routes again.
+        #[cfg(not(bun_standalone))]
         if let Some(dev_server) = self.dev_server.as_deref_mut() {
             // Prevent a use-after-free in the hash table keys.
             dev_server.html_router.clear();
@@ -3170,6 +3185,17 @@ where
             httplog!("{} - {}", BStr::new(&m), BStr::new(&u));
         }
 
+        #[cfg(bun_standalone)]
+        {
+            // No DevServer under standalone — `should_add_chrome_devtools_json_route`
+            // is statically false, so this handler is never registered. Keep the
+            // body type-checking by yielding.
+            let _ = resp;
+            req.set_yield(true);
+            return;
+        }
+        #[cfg(not(bun_standalone))]
+        {
         let authorized = 'brk: {
             let Some(dev_server) = self.dev_server.as_deref() else {
                 break 'brk false;
@@ -3245,6 +3271,7 @@ where
         resp.write_status(b"200 OK");
         resp.write_header(b"Content-Type", b"application/json");
         resp.end(&json_string, resp.should_close_connection());
+        }
     }
 
     pub(crate) fn on_client_error_callback(

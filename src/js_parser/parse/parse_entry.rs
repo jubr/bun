@@ -1002,7 +1002,8 @@ impl<'a> Parser<'a> {
         let mut visit_tracer = bun_core::perf::trace("JSParser::visit");
         p.prepare_for_visit_pass()?;
 
-        if p.options.features.react_compiler.is_enabled() {
+        // AIDEV-NOTE: cfg! (a constant) rather than #[cfg]: the branch is gone before the link, the code stays in one shape.
+        if cfg!(not(bun_standalone)) && p.options.features.react_compiler.is_enabled() {
             let rc_options = bun_react_compiler::ReactCompilerOptions {
                 enabled: true,
                 is_dev: p.options.jsx.development,
@@ -2374,7 +2375,9 @@ impl<'a> Parser<'a> {
             )?;
         }
 
-        if let Some(rc_state) = p.react_compiler.take() {
+        if cfg!(not(bun_standalone))
+            && let Some(rc_state) = p.react_compiler.take()
+        {
             let mut rc_stmts: Vec<Stmt> = Vec::new();
             let result = bun_react_compiler::finish(
                 *rc_state,

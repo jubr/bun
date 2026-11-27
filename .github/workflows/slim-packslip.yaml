@@ -1,0 +1,131 @@
+name: Packslip
+
+# Signs one published bun-slim release with jdx/packslip (https://packslip.dev/release/v1/), the way the variant repository
+# signs its own: the signing job cannot change the release, the next job uploads only the bundle.
+#
+# What is signed, for the release tag bun-slim-v<version>-<N>:
+#   artifacts   the eight zips (bun-alone-<target>-v<version>-<N>.zip, bun-slim-...). `size` is the size of the zip; the
+#               variant of each is `alone` or `slim`, and each names its executable.
+#   extensions  the size in bytes of the stripped upstream Bun executable (the stock
+#               release build of the same source, level orig) for every target a slim was built for:
+#                 "bun-upstream-darwin-arm64-v1.4.5-size": 89360943
+#               They come from the release asset bun-dist-standalone-slim-sizes.json, which `release` in slim-build.yaml
+#               writes (scripts/slim/markdownify-sizes.ts --json).
+# Called by slim-build.yaml after a release, or dispatched for a tag that exists.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to sign, for example bun-slim-v1.4.5-0
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to sign, for example bun-slim-v1.4.5-0
+        required: true
+        type: string
+
+jobs:
+  sign:
+    name: Sign release
+    if: github.ref == 'refs/heads/slim'
+    runs-on: ubuntu-latest
+    permissions:
+      # AIDEV-NOTE: contents stays read. jdx/packslip uses this job's token even when token is not an input.
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the eight zips and the sizes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          suffix="${TAG#bun-slim-v}"
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist --clobber \
+            --pattern 'bun-*.zip' --pattern bun-dist-standalone-slim-sizes.json
+          test -f dist/bun-dist-standalone-slim-sizes.json
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            for level in alone slim; do
+              test -f "dist/bun-${level}-${target}-v${suffix}.zip"
+            done
+          done
+
+      # The manifest says what the file names cannot: the platform, the variant (alone and slim share one) and the
+      # executable inside each zip, and the release-level extension with the sizes of upstream Bun.
+      - name: Write the manifest
+        id: manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          suffix="${TAG#bun-slim-v}"
+          sizes=dist/bun-dist-standalone-slim-sizes.json
+          version="$(jq -r .version "$sizes")"
+          manifest="$RUNNER_TEMP/release.toml"
+          {
+            echo '[extensions]'
+            jq -r --arg v "$version" '.targets | to_entries[] | select(.value.orig != null)
+              | "\"bun-upstream-\(.key)-v\($v)-size\" = \(.value.orig)"' "$sizes"
+            for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+              case "$target" in
+                linux-x64) os=linux arch=x86_64 libc=gnu ;;
+                linux-arm64) os=linux arch=aarch64 libc=gnu ;;
+                darwin-x64) os=darwin arch=x86_64 libc= ;;
+                darwin-arm64) os=darwin arch=aarch64 libc= ;;
+              esac
+              for level in alone slim; do
+                dir="bun-${level}-${target}-v${suffix}"
+                printf '\n[[artifact]]\npath = "dist/%s.zip"\nvariant = "%s"\nos = "%s"\narch = "%s"\n' "$dir" "$level" "$os" "$arch"
+                [[ -z "$libc" ]] || printf 'libc = "%s"\n' "$libc"
+                printf 'bin = [{ name = "bun-%s", path = "%s/bun-%s" }]\n' "$level" "$dir" "$level"
+              done
+            done
+          } > "$manifest"
+          cat "$manifest"
+          echo "path=$manifest" >> "$GITHUB_OUTPUT"
+          # The version is named for the action: it takes the tag without a leading v, and bun-slim-v1.4.5-1 is not semver.
+          echo "version=$suffix" >> "$GITHUB_OUTPUT"
+          # The commit of the tag: the release job tags the commit it was dispatched on.
+          echo "commit=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" >> "$GITHUB_OUTPUT"
+
+      - uses: jdx/packslip@44e50e5f64551234b4a382d991bd7f7f7d021d06 # v1.11.3
+        id: packslip
+        with:
+          artifacts: dist/*.zip
+          manifest: ${{ steps.manifest.outputs.path }}
+          version: ${{ steps.manifest.outputs.version }}
+          tag: ${{ inputs.tag }}
+          commit: ${{ steps.manifest.outputs.commit }}
+          upload: false
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: packslip-bundle
+          path: ${{ steps.packslip.outputs.bundle }}
+          if-no-files-found: error
+
+  publish:
+    name: Upload packslip bundle
+    needs: sign
+    if: github.ref == 'refs/heads/slim'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: packslip-bundle
+          path: packslip
+      - name: Upload the signed bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          test -f packslip/packslip.sigstore.json
+          gh release upload "$TAG" packslip/packslip.sigstore.json \
+            --repo "$GITHUB_REPOSITORY" --clobber

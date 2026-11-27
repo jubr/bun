@@ -1,0 +1,450 @@
+name: slim-build
+
+# bun-slim: builds upstream Bun, bun-alone and bun-slim for linux-x64, linux-arm64, darwin-x64 and darwin-arm64 on GitHub's
+# free Linux runners. darwin is cross-compiled from Linux (no macOS runner), the way .buildkite/ci.ts builds the release.
+# See README.md ("How it is organised") for why this repo exists and how the branch is built up.
+#
+#   prep   (per host arch)  downloads what the build fetches (dependency sources, WebKit, Node headers, the macOS SDK)
+#                           and saves it as one cache. Runs on the default branch (`slim`), on the schedule and on request.
+#   plan                    the Bun version and the next free build number N (the names of the artifacts and the tag).
+#   build  (4 in parallel)  restores the prep cache, then builds three levels in succession (see below), verifies the
+#                           two it ships, uploads bun-alone-<target>-v<version>-<N> and bun-slim-<target>-v<version>-<N>.
+#   release                 on request (`release` input): one GitHub prerelease with the eight zips, the sums and
+#                           bun-dist-standalone-slim-sizes.json, tagged bun-slim-v<version>-<N>, explanation and size table in
+#                           its notes; the same table goes to the top of README.md (commit with [skip ci]).
+#   packslip                after the release: signs it (slim-packslip.yaml, a reusable workflow).
+#
+# The history of `slim` is three series on top of the upstream tag: tooling (A), bun-standalone as the PR has it (B), slim (C).
+# Each level is built after resetting the tree to the end of its series (.github/scripts/slim/lib.sh `level_rev`):
+#   orig   end of A: upstream as the tag has it, stock release build. Only its size is wanted, so a failure of this step
+#          (continue-on-error) loses nothing that is shipped; the table shows a dash.
+#   alone  end of B: bun-standalone, MinSizeRel. Shipped as bun-alone.
+#   slim   end of C: Bun.Image and bun:ffi stubbed, compiled for size. Shipped as bun-slim.
+# The size table comes from the artifacts of this run alone.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prep:
+        description: Run the cache prep job on this ref (it runs on the default branch and the schedule anyway)
+        type: boolean
+        default: false
+      release:
+        description: Publish a prerelease (bun-slim-v<version>-<N>) after a green build
+        type: boolean
+        default: false
+  push:
+    # Editing the build tests it, on the default branch.
+    branches:
+      - slim
+    paths:
+      - .github/workflows/slim-build.yaml
+      - .github/actions/slim-toolchain/action.yml
+      - .github/scripts/slim/*.sh
+      - scripts/slim/*.ts
+  schedule:
+    - cron: "17 4 */5 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slim-build-${{ github.ref }}
+  cancel-in-progress: false
+
+# The dependency cache holds what scripts/build downloads: vendor/ and the extracted prebuilts, the macOS SDK. Not the
+# apt/rustup toolchain (fast to fetch) and not the raw tarballs.
+
+jobs:
+  prep:
+    name: Prep ${{ matrix.host }}
+    # AIDEV-NOTE: `slim` by name: github.event.repository.default_branch was still `main` in the push event after the switch, so prep was skipped.
+    if: github.event_name == 'schedule' || inputs.prep || github.ref_name == 'slim'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One x64 host builds three targets; the arm64 host only the native linux-arm64.
+          - host: x64
+            runner: ubuntu-24.04
+            targets: darwin-arm64 darwin-x64 linux-x64
+            rust_targets: aarch64-apple-darwin x86_64-apple-darwin
+          - host: arm64
+            runner: ubuntu-24.04-arm
+            targets: linux-arm64
+            rust_targets: ""
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Install the toolchain
+        uses: ./.github/actions/slim-toolchain
+        with:
+          rust-targets: ${{ matrix.rust_targets }}
+
+      # The same key as `build_deps` in the build job: the hash is cut to 10 characters, DEP names it.
+      - name: Dependency cache key
+        id: deps
+        run: echo "key=slim-deps-${{ matrix.host }}-DEP$(printf '%s' '${{ hashFiles('scripts/build/deps/**', 'scripts/build/ci-images/spec.ts', 'scripts/build/macos-sdk.ts', 'scripts/build/download.ts') }}' | cut -c1-10)" >> "$GITHUB_OUTPUT"
+
+      # The save happens in this action's post step, after the prefetch below filled the paths.
+      - name: Dependency cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            vendor
+            ~/.bun/build-cache
+            !~/.bun/build-cache/tarballs
+            !~/.bun/build-cache/ccache
+          key: ${{ steps.deps.outputs.key }}
+          restore-keys: |
+            slim-deps-${{ matrix.host }}-
+
+      - name: Fetch
+        run: |
+          bun install --frozen-lockfile
+          .github/scripts/slim/prefetch.sh ${{ matrix.targets }}
+
+  plan:
+    name: Plan
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      n: ${{ steps.next.outputs.n }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+
+      # AIDEV-NOTE: <version> is upstream's package.json and <N> the next free build number for it, taken
+      # from the existing tags (not a counter), so deleting a release frees nothing but its own number.
+      - name: Version and build number
+        id: next
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(jq -r .version package.json)"
+          prefix="bun-slim-v${version}-"
+          last="$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$prefix" --jq '.[].ref' |
+            sed "s#^refs/tags/$prefix##" | grep -E '^[0-9]+$' | sort -n | tail -1 || true)"
+          n=$(( ${last:--1} + 1 ))
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "n=$n" >> "$GITHUB_OUTPUT"
+          echo "bun-slim-v${version}-${n}" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: [prep, plan]
+    # prep is skipped off the default branch, and a failed prep only costs time: the build downloads what is missing.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && github.event_name != 'schedule' }}
+    runs-on: ${{ matrix.runner }}
+    # Three compiles in succession; a cold ccache needs most of this, a warm one a fraction.
+    timeout-minutes: 340
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1500M
+      NAME_SUFFIX: ${{ matrix.target }}-v${{ needs.plan.outputs.version }}-${{ needs.plan.outputs.n }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            host: x64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            host: arm64
+            runner: ubuntu-24.04-arm
+          # AIDEV-NOTE: darwin builds on the x64 host: every cross target uses the x64 prep cache (SDK, WebKit for both).
+          - target: darwin-x64
+            host: x64
+            runner: ubuntu-24.04
+            rust_targets: x86_64-apple-darwin
+          - target: darwin-arm64
+            host: x64
+            runner: ubuntu-24.04
+            rust_targets: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The three series are a few dozen commits; level_rev looks at the last 400.
+          fetch-depth: 400
+
+      # AIDEV-NOTE: every key is made here, once, and printed before it goes to the outputs. A hash is cut to 10 characters
+      # and carries a name of 3 to 5 capitals: DEP (the files the dependencies come from), GIT (this run's commit), END (the
+      # commit of the end of a series, the tree a binary is built from; the tooling is part of every series). Runtimes:
+      # orig is keyed by the Bun version only (it changes with the base, not with a commit of ours), alone and slim by the
+      # run's commit as well: a new commit always rebuilds them (the ccache makes that cheap).
+      - name: Levels and cache keys
+        id: keys
+        run: |
+          source .github/scripts/slim/lib.sh
+          short() { printf '%s' "$1" | cut -c1-10; }
+          git log --oneline -1 "$(level_rev orig)"; git log --oneline -1 "$(level_rev alone)"; git log --oneline -1 "$(level_rev slim)"
+          git=GIT"$(short "$GITHUB_SHA")"
+          {
+            echo "build_deps_prefix=slim-deps-${{ matrix.host }}-"
+            echo "build_deps=slim-deps-${{ matrix.host }}-DEP$(short '${{ hashFiles('scripts/build/deps/**', 'scripts/build/ci-images/spec.ts', 'scripts/build/macos-sdk.ts', 'scripts/build/download.ts') }}')"
+            echo "runtime_orig=slim-runtime-orig-${{ matrix.target }}-v${{ needs.plan.outputs.version }}"
+            echo "runtime_alone=slim-runtime-alone-${{ matrix.target }}-$git-END$(short "$(level_rev alone)")"
+            echo "runtime_slim=slim-runtime-slim-${{ matrix.target }}-$git-END$(short "$(level_rev slim)")"
+            echo "ccache_prefix=slim-ccache-${{ matrix.target }}-"
+            echo "ccache=slim-ccache-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          } | tee "$RUNNER_TEMP/keys.txt"
+          cat "$RUNNER_TEMP/keys.txt" >> "$GITHUB_OUTPUT"
+
+      # Three caches, each restore-only here and saved by its own step right after its compile, so a later failure does
+      # not throw a finished build away. They hold the finished binary of a level.
+      - name: Cache restore runtime bun-orig
+        id: orig
+        uses: actions/cache/restore@v6
+        with:
+          path: out/orig
+          key: ${{ steps.keys.outputs.runtime_orig }}
+
+      - name: Cache restore runtime bun-alone
+        id: alone
+        uses: actions/cache/restore@v6
+        with:
+          path: out/alone
+          key: ${{ steps.keys.outputs.runtime_alone }}
+
+      - name: Cache restore runtime bun-slim
+        id: slim
+        uses: actions/cache/restore@v6
+        with:
+          path: out/slim
+          key: ${{ steps.keys.outputs.runtime_slim }}
+
+      - name: What to compile
+        id: need
+        run: |
+          compile=false
+          [[ "${{ steps.orig.outputs.cache-hit }}" != true || "${{ steps.alone.outputs.cache-hit }}" != true || "${{ steps.slim.outputs.cache-hit }}" != true ]] && compile=true
+          echo "compile=$compile" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      # A darwin target needs llvm-objdump to be verified, so it installs the toolchain without a compile too.
+      - name: Install the toolchain
+        if: steps.need.outputs.compile == 'true' || startsWith(matrix.target, 'darwin')
+        uses: ./.github/actions/slim-toolchain
+        with:
+          rust-targets: ${{ matrix.rust_targets }}
+
+      # Restore only: the prep job is the one writer (see the header).
+      - name: Cache restore build deps
+        if: steps.need.outputs.compile == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            vendor
+            ~/.bun/build-cache
+            !~/.bun/build-cache/tarballs
+            !~/.bun/build-cache/ccache
+          key: ${{ steps.keys.outputs.build_deps }}
+          restore-keys: |
+            ${{ steps.keys.outputs.build_deps_prefix }}
+
+      # One ccache per target (x64 and arm64, linux and darwin objects share nothing), shared by alone and slim: same
+      # compiler settings, only sources change. orig compiles without ccache (CCACHE_DISABLE in compile.sh): different
+      # flags share no object with them, and it only runs when the base or the tooling moves. A stale entry only costs
+      # time, so it restores by prefix; every run that compiled saves a new one, also a failed or cancelled one.
+      - name: Cache restore build ccache
+        if: steps.need.outputs.compile == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ${{ steps.keys.outputs.ccache }}
+          restore-keys: |
+            ${{ steps.keys.outputs.ccache_prefix }}
+
+      # 1/3: upstream, first: only its size is wanted, so a failure here costs nothing that is shipped. Throwaway build.
+      - name: Build orig (upstream Bun, size only)
+        id: build_orig
+        if: steps.orig.outputs.cache-hit != 'true'
+        continue-on-error: true
+        timeout-minutes: 120
+        run: .github/scripts/slim/compile.sh orig "${{ matrix.target }}"
+
+      - name: Cache save runtime bun-orig
+        if: steps.build_orig.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: out/orig
+          key: ${{ steps.keys.outputs.runtime_orig }}
+
+      # 2/3: bun-alone (bun-standalone).
+      - name: Build alone (bun-standalone)
+        if: steps.alone.outputs.cache-hit != 'true'
+        timeout-minutes: 120
+        run: .github/scripts/slim/compile.sh alone "${{ matrix.target }}"
+
+      - name: Cache save runtime bun-alone
+        if: success() && steps.alone.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: out/alone
+          key: ${{ steps.keys.outputs.runtime_alone }}
+
+      # 3/3: bun-slim, in the same build directory as alone: only what the slim series changed recompiles.
+      - name: Build slim (bun-slim)
+        if: steps.slim.outputs.cache-hit != 'true'
+        timeout-minutes: 120
+        run: .github/scripts/slim/compile.sh slim "${{ matrix.target }}"
+
+      - name: Cache save runtime bun-slim
+        if: success() && steps.slim.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: out/slim
+          key: ${{ steps.keys.outputs.runtime_slim }}
+
+      # AIDEV-NOTE: always(): the objects of a failed, cancelled or timed-out build are what the next run needs. The build
+      # steps have their own timeout-minutes (below the job's), so a hung compile still leaves time for this step.
+      - name: Cache save build ccache
+        if: ${{ always() && steps.need.outputs.compile == 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ${{ steps.keys.outputs.ccache }}
+
+      # Runs for restored binaries as well, so a bad cache entry cannot ship.
+      - name: Verify bun-alone
+        run: .github/scripts/slim/verify.sh "${{ matrix.target }}" out/alone/bun-alone alone
+
+      - name: Verify bun-slim
+        run: .github/scripts/slim/verify.sh "${{ matrix.target }}" out/slim/bun-slim slim
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          for level in alone slim; do
+            name="bun-$level-$NAME_SUFFIX"
+            mkdir -p "dist/$name"
+            cp "out/$level/bun-$level" "dist/$name/bun-$level"
+            (cd dist && zip -qr "$name.zip" "$name" && rm -r "$name" && sha256sum "$name.zip" > "$name.zip.sha256")
+          done
+          printf '{"target": "%s", "orig": %s, "alone": %s, "slim": %s}\n' "${{ matrix.target }}" \
+            "$([[ -f out/orig/bun-orig ]] && stat -c %s out/orig/bun-orig || echo null)" "$(stat -c %s out/alone/bun-alone)" "$(stat -c %s out/slim/bun-slim)" \
+            | tee "dist/sizes-${{ matrix.target }}.json"
+          ls -l dist
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${{ matrix.target }}"
+            jq -r '"| orig | alone | slim |\n| ---: | ---: | ---: |\n| \(.orig // "n/a") | \(.alone) | \(.slim) |"' "dist/sizes-${{ matrix.target }}.json"
+            echo "- commit: \`${GITHUB_SHA::10}\`"
+            echo "- compiled in this run: ${{ steps.need.outputs.compile }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach bun-alone
+        uses: actions/upload-artifact@v7
+        with:
+          name: bun-alone-${{ env.NAME_SUFFIX }}
+          path: dist/bun-alone-${{ env.NAME_SUFFIX }}.zip*
+          if-no-files-found: error
+
+      - name: Attach bun-slim
+        uses: actions/upload-artifact@v7
+        with:
+          name: bun-slim-${{ env.NAME_SUFFIX }}
+          path: dist/bun-slim-${{ env.NAME_SUFFIX }}.zip*
+          if-no-files-found: error
+
+      - name: Attach the sizes
+        uses: actions/upload-artifact@v7
+        with:
+          name: slim-sizes-${{ matrix.target }}
+          path: dist/sizes-${{ matrix.target }}.json
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: [plan, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.release }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    # Two releases at once would use the same number.
+    concurrency:
+      group: slim-release
+      cancel-in-progress: false
+    env:
+      TAG: bun-slim-v${{ needs.plan.outputs.version }}-${{ needs.plan.outputs.n }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: bun-*-v*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: sizes
+          pattern: slim-sizes-*
+          merge-multiple: true
+
+      # The notes (why + the size table) and the same table at the top of README.md.
+      - name: Notes and size table
+        run: |
+          ls -l dist sizes
+          (cd dist && sha256sum -c -- *.sha256)
+          cat dist/*.sha256 > dist/SHA256SUMS
+          bun scripts/slim/markdownify-sizes.ts --sizes sizes --version "${{ needs.plan.outputs.version }}" --n "${{ needs.plan.outputs.n }}" \
+            --notes notes.md --readme README.md --json dist/bun-dist-standalone-slim-sizes.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" dist/*.zip dist/SHA256SUMS dist/bun-dist-standalone-slim-sizes.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --prerelease --notes-file notes.md
+          echo "published $TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # AIDEV-NOTE: [skip ci], and README.md is outside this workflow's push paths anyway. Only from the default branch.
+      - name: Put the size table in README.md
+        if: github.ref_name == 'slim'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then echo "README.md already has this table"; exit 0; fi
+          git commit -m "docs: size table of $TAG [skip ci]"
+          git pull --rebase origin slim
+          git push origin HEAD:slim
+
+  # The signed packslip of the release, written by its own workflow (also dispatchable for a tag that exists).
+  packslip:
+    name: Packslip
+    needs: [plan, release]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/slim-packslip.yaml
+    with:
+      tag: bun-slim-v${{ needs.plan.outputs.version }}-${{ needs.plan.outputs.n }}

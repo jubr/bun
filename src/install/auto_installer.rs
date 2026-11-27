@@ -446,6 +446,7 @@ fn __bun_resolver_parse_dependency(
 //     the CLI-owned `Box<BunInstall>` (process-lifetime), read-only.
 //   • `env` is the resolver's unwrapped `env_loader` (Transpiler-owned,
 //     process-lifetime). `init_with_runtime` stores it as `NonNull<Loader>`.
+#[cfg(not(bun_standalone))]
 #[unsafe(no_mangle)]
 unsafe fn __bun_resolver_init_package_manager(
     mut log: core::ptr::NonNull<bun_ast::Log>,
@@ -500,4 +501,19 @@ unsafe fn __bun_resolver_init_package_manager(
     // singleton; upcast to the trait object the resolver stores.
     Ok(core::ptr::NonNull::new(pm as *mut dyn hooks::AutoInstaller)
         .expect("init_with_runtime returns the holder::RAW_PTR singleton"))
+}
+
+// `bun-standalone` carries no package manager: auto-install is forced off in
+// the resolver, so this link-time hook is never called. Keep the symbol so the
+// resolver's `extern "Rust"` declaration still resolves; reaching it is a bug.
+#[cfg(bun_standalone)]
+#[unsafe(no_mangle)]
+unsafe fn __bun_resolver_init_package_manager(
+    _log: core::ptr::NonNull<bun_ast::Log>,
+    _install: Option<core::ptr::NonNull<crate::bun_schema::api::BunInstall>>,
+    _env: core::ptr::NonNull<bun_dotenv::Loader>,
+    _prefer_offline: bool,
+    _importer_dir: &[u8],
+) -> core::result::Result<core::ptr::NonNull<dyn hooks::AutoInstaller>, bun_resolver::Error> {
+    unreachable!("auto-install is not available in bun-standalone")
 }

@@ -215,7 +215,11 @@ pub(crate) fn run_task(
             unsafe { crate::ipc::SendQueue::run_deferred(cast_ptr!(crate::ipc::SendQueue)) };
         }
         task_tag::AsyncModule => {
+            // `AsyncModule::done` is never reached: auto-install is gated out of standalone.
+            #[cfg(bun_standalone)]
+            unreachable!("AsyncModule tasks are not available in standalone executables");
             // SAFETY: `AsyncModule::done` boxed it; the arm consumes the box.
+            #[cfg(not(bun_standalone))]
             bun_jsc::async_module::AsyncModule::on_done(unsafe {
                 bun_core::heap::take(cast_ptr!(bun_jsc::async_module::AsyncModule))
             })?;
@@ -532,6 +536,7 @@ pub(crate) fn run_task(
             cast!(JSCDeferredWorkTask).run(global)?;
         }
         task_tag::PollPendingModulesTask => {
+            #[cfg(not(bun_standalone))]
             vm.modules.on_poll();
         }
         task_tag::RuntimeTranspilerStore => {

@@ -4,17 +4,32 @@
 //! against lower-tier crates. `Command::start()` (full dispatch) and
 //! per-command exec bodies live in the sibling `*_command.rs` modules.
 
+// Under `bun_standalone` the toolkit `*_command` modules are `cfg`-gated out
+// entirely (see the `#[cfg(not(bun_standalone))]` blocks below), so their
+// calls into `bun_install` / `bun_css` / `bundle_v2` are not compiled and
+// those crates can dead-strip from the link. The few runtime-reachable items
+// that originally lived in toolkit modules (`FileSystemTmpdirExt`,
+// `Bun__githubURL`, release-name consts) now live in `cli::shared`; a tiny
+// `upgrade_command` stub is provided for the codegen js2native thunk. The
+// non-standalone build still enforces `dead_code = "deny"`.
+#![cfg_attr(bun_standalone, allow(dead_code, unused_macros, unused_imports))]
+
 use bun_core::strings;
 use bun_core::{self as bun, Global, Output};
 use bun_core::{pretty, pretty_error, pretty_errorln};
 
+// ─── always-compiled shared items (runtime-reachable) ────────────────────────
+pub(crate) mod shared;
+
 // ─── compiling submodules ────────────────────────────────────────────────────
+#[cfg(not(bun_standalone))]
 #[path = "add_completions.rs"]
 pub(crate) mod add_completions;
 #[path = "colon_list_type.rs"]
 pub(crate) mod colon_list_type;
 #[path = "discord_command.rs"]
 pub(crate) mod discord_command;
+#[cfg(not(bun_standalone))]
 #[path = "shell_completions.rs"]
 pub(crate) mod shell_completions;
 
@@ -55,10 +70,13 @@ pub(crate) mod open {
 // `create_context_data`), so its help/print-only paths are handled inline in
 // `Command::start()` below. `install_completions_command.rs` is fully wired
 // via `exec_install_completions` (its `exec()` takes no Context).
+#[cfg(not(bun_standalone))]
 #[path = "init_command.rs"]
 pub(crate) mod init_command;
+#[cfg(not(bun_standalone))]
 #[path = "install_completions_command.rs"]
 pub(crate) mod install_completions_command;
+#[cfg(not(bun_standalone))]
 #[path = "package_manager_command.rs"]
 pub(crate) mod package_manager_command;
 
@@ -116,28 +134,49 @@ pub(crate) mod run_command;
 // ─── per-subcommand bodies ───────────────────────────────────────────────────
 #[path = "build_command.rs"]
 pub(crate) mod build_command;
+#[cfg(not(bun_standalone))]
 #[path = "bunx_command.rs"]
 pub(crate) mod bunx_command;
+#[cfg(not(bun_standalone))]
 #[path = "create_command.rs"]
 pub(crate) mod create_command;
 #[path = "exec_command.rs"]
 pub(crate) mod exec_command;
+#[cfg(not(bun_standalone))]
 #[path = "fuzzilli_command.rs"]
 pub(crate) mod fuzzilli_command;
+#[cfg(not(bun_standalone))]
 #[path = "install_command.rs"]
 pub(crate) mod install_command;
 #[path = "repl_command.rs"]
 pub(crate) mod repl_command;
+#[cfg(not(bun_standalone))]
 #[path = "upgrade_command.rs"]
 pub(crate) mod upgrade_command;
+/// `cfg(bun_standalone)` stub: only what `generated_js2native.rs` references.
+#[cfg(bun_standalone)]
+pub(crate) mod upgrade_command {
+    pub(crate) mod upgrade_js_bindings {
+        use bun_jsc::{JSGlobalObject, JSValue};
+        pub(crate) fn generate(global: &JSGlobalObject) -> JSValue {
+            let _ = global.throw(format_args!(
+                "bun upgrade is not available in standalone executables"
+            ));
+            JSValue::ZERO
+        }
+    }
+}
 // MOVE_UP: `--analyze` branch + `Cli.log_` access of
 // `bun_install::update_package_json_and_install{,_catch_error}` — see file header.
+#[cfg(not(bun_standalone))]
 #[path = "add_command.rs"]
 pub(crate) mod add_command;
+#[cfg(not(bun_standalone))]
 #[path = "audit_command.rs"]
 pub(crate) mod audit_command;
 #[path = "check_command.rs"]
 pub(crate) mod check_command;
+#[cfg(not(bun_standalone))]
 #[path = "dedupe_command.rs"]
 pub(crate) mod dedupe_command;
 #[path = "filter_arg.rs"]
@@ -146,6 +185,7 @@ pub(crate) mod filter_arg;
 pub(crate) mod filter_run;
 #[path = "format_command.rs"]
 pub(crate) mod format_command;
+#[cfg(not(bun_standalone))]
 #[path = "link_command.rs"]
 pub(crate) mod link_command;
 #[path = "lint_command.rs"]
@@ -154,50 +194,90 @@ pub(crate) mod lint_command;
 pub(crate) mod lint_js;
 #[path = "multi_run.rs"]
 pub(crate) mod multi_run;
+#[cfg(not(bun_standalone))]
 #[path = "outdated_command.rs"]
 pub(crate) mod outdated_command;
+#[cfg(not(bun_standalone))]
 #[path = "pack_command.rs"]
 pub(crate) mod pack_command;
+/// `cfg(bun_standalone)` stub: only what `generated_js2native.rs` references.
+#[cfg(bun_standalone)]
+pub(crate) mod pack_command {
+    pub(crate) mod bindings {
+        use bun_jsc::{CallFrame, JSGlobalObject, JSValue, JsResult};
+        pub(crate) fn js_read_tarball(
+            global: &JSGlobalObject,
+            _call_frame: &CallFrame,
+        ) -> JsResult<JSValue> {
+            Err(global.throw(format_args!(
+                "bun pm pack is not available in standalone executables"
+            )))
+        }
+    }
+}
+#[cfg(not(bun_standalone))]
 #[path = "patch_command.rs"]
 pub(crate) mod patch_command;
+#[cfg(not(bun_standalone))]
 #[path = "patch_commit_command.rs"]
 pub(crate) mod patch_commit_command;
+#[cfg(not(bun_standalone))]
 pub(crate) mod pm_cache_prune_command;
+#[cfg(not(bun_standalone))]
 #[path = "pm_diff_command.rs"]
 pub(crate) mod pm_diff_command;
+#[cfg(not(bun_standalone))]
 pub(crate) mod pm_diff_normalize;
+#[cfg(not(bun_standalone))]
 pub(crate) mod pm_diff_profile;
+#[cfg(not(bun_standalone))]
 pub(crate) mod pm_diff_relayout;
+#[cfg(not(bun_standalone))]
 pub(crate) mod pm_diff_semantic;
+#[cfg(not(bun_standalone))]
 pub(crate) mod pm_fetch_command;
+#[cfg(not(bun_standalone))]
 #[path = "pm_licenses_command.rs"]
 pub(crate) mod pm_licenses_command;
+#[cfg(not(bun_standalone))]
 #[path = "pm_pkg_command.rs"]
 pub(crate) mod pm_pkg_command;
+#[cfg(not(bun_standalone))]
 #[path = "pm_trusted_command.rs"]
 pub(crate) mod pm_trusted_command;
+#[cfg(not(bun_standalone))]
 pub(crate) mod pm_update_package_json;
+#[cfg(not(bun_standalone))]
 #[path = "pm_version_command.rs"]
 pub(crate) mod pm_version_command;
+#[cfg(not(bun_standalone))]
 #[path = "pm_view_command.rs"]
 pub(crate) mod pm_view_command;
+#[cfg(not(bun_standalone))]
 #[path = "prune_command.rs"]
 pub(crate) mod prune_command;
+#[cfg(not(bun_standalone))]
 #[path = "publish_command.rs"]
 pub(crate) mod publish_command;
+#[cfg(not(bun_standalone))]
 #[path = "remove_command.rs"]
 pub(crate) mod remove_command;
+#[cfg(not(bun_standalone))]
 #[path = "scan_command.rs"]
 pub(crate) mod scan_command;
 #[path = "script_or_command.rs"]
 pub(crate) mod script_or_command;
 mod typescript_libs;
+#[cfg(not(bun_standalone))]
 #[path = "unlink_command.rs"]
 pub(crate) mod unlink_command;
+#[cfg(not(bun_standalone))]
 #[path = "update_command.rs"]
 pub(crate) mod update_command;
+#[cfg(not(bun_standalone))]
 #[path = "update_interactive_command.rs"]
 pub(crate) mod update_interactive_command;
+#[cfg(not(bun_standalone))]
 #[path = "why_command.rs"]
 pub(crate) mod why_command;
 
@@ -309,7 +389,14 @@ fn cli_dupe_z(s: &[u8]) -> *const core::ffi::c_char {
 ///
 /// Canonical static lives in `bun_install` so both crates read/write the SAME
 /// flag (`RunCommand::create_fake_temporary_node_executable` lives there).
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install::PRETEND_TO_BE_NODE;
+/// Under `bun_standalone` the install tier is severed, so a local static is
+/// used instead — the standalone runtime never spawns lifecycle scripts that
+/// need to observe the shared flag from `bun_install`.
+#[cfg(bun_standalone)]
+pub(crate) static PRETEND_TO_BE_NODE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
 
 /// This is set `true` during `Command.which()` if argv0 is "bunx"
 static IS_BUNX_EXE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
@@ -1124,6 +1211,27 @@ pub(crate) mod command {
         // live and honours `stop_after_positional_at = 1` — the shim broke
         // `bun <bin> --version` by intercepting the flag meant for `<bin>`.
 
+        // ─── bun-standalone ─────────────────────────────────────────────────
+        // The reduced-footprint --compile runtime only carries the run path:
+        // a real --compile output returns via `boot_standalone` above and
+        // never reaches this match. The bare `bun-standalone` binary (CI
+        // smoke test, `BUN_BE_BUN=1`, debugging) keeps Auto/Run/RunAsNode/
+        // Exec/Repl/Help working; every toolkit subcommand surfaces an
+        // explicit error so the dispatch arm below — and the `*_command`
+        // modules it references — can be compiled out for `--gc-sections`.
+        #[cfg(bun_standalone)]
+        return match tag {
+            Tag::AutoCommand | Tag::RunCommand => exec_auto_or_run(tag, log),
+            Tag::HelpCommand => HelpCommand::exec(),
+            Tag::ReservedCommand => ReservedCommand::exec(),
+            Tag::DiscordCommand => super::discord_command::DiscordCommand::exec(),
+            Tag::RunAsNodeCommand => exec_run_as_node(log),
+            Tag::ExecCommand => exec_exec(log),
+            Tag::ReplCommand => exec_repl(log),
+            other => crate::standalone_build::unavailable_command(tag_name(other)),
+        };
+
+        #[cfg(not(bun_standalone))]
         match tag {
             Tag::AutoCommand | Tag::RunCommand => exec_auto_or_run(tag, log),
             Tag::HelpCommand => HelpCommand::exec(),
@@ -1161,6 +1269,53 @@ pub(crate) mod command {
             Tag::UpgradeCommand => exec_upgrade(log),
             Tag::ExecCommand => exec_exec(log),
             Tag::FuzzilliCommand => exec_fuzzilli(log),
+        }
+    }
+
+    /// User-facing subcommand name for the standalone "not available" error.
+    /// Only the toolkit tags need entries; runtime tags never reach the stub.
+    #[cfg(bun_standalone)]
+    fn tag_name(tag: Tag) -> &'static [u8] {
+        match tag {
+            Tag::BuildCommand => b"build",
+            Tag::TestCommand => b"test",
+            Tag::InstallCommand => b"install",
+            Tag::AddCommand => b"add",
+            Tag::RemoveCommand => b"remove",
+            Tag::UpdateCommand => b"update",
+            Tag::UpdateInteractiveCommand => b"update --interactive",
+            Tag::LinkCommand => b"link",
+            Tag::UnlinkCommand => b"unlink",
+            Tag::PackageManagerCommand => b"pm",
+            Tag::OutdatedCommand => b"outdated",
+            Tag::PublishCommand => b"publish",
+            Tag::PatchCommand => b"patch",
+            Tag::PatchCommitCommand => b"patch --commit",
+            Tag::AuditCommand => b"audit",
+            Tag::WhyCommand => b"why",
+            Tag::InfoCommand => b"info",
+            Tag::InitCommand => b"init",
+            Tag::CreateCommand => b"create",
+            Tag::BunxCommand => b"x",
+            Tag::UpgradeCommand => b"upgrade",
+            Tag::InstallCompletionsCommand => b"completions",
+            Tag::GetCompletionsCommand => b"getcompletes",
+            Tag::FuzzilliCommand => b"fuzzilli",
+            Tag::CheckCommand => b"check",
+            Tag::LintCommand => b"lint",
+            Tag::FormatCommand => b"fmt",
+            Tag::DedupeCommand => b"dedupe",
+            Tag::PruneCommand => b"prune",
+            // Runtime tags — handled before the stub arm; listed for
+            // exhaustiveness only.
+            Tag::AutoCommand
+            | Tag::RunCommand
+            | Tag::RunAsNodeCommand
+            | Tag::HelpCommand
+            | Tag::ReservedCommand
+            | Tag::DiscordCommand
+            | Tag::ExecCommand
+            | Tag::ReplCommand => b"<unreachable>",
         }
     }
 
@@ -1311,6 +1466,7 @@ pub(crate) mod command {
             return run_command::RunCommand::exec_eval(ctx);
         }
 
+        #[cfg(not(bun_standalone))]
         if tag == Tag::AutoCommand && ctx.args.entry_points.len() == 1 {
             let extension = bun_paths::extension(&ctx.args.entry_points[0]);
             if extension == b".lockb" {
@@ -1345,6 +1501,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_init() -> CmdResult {
@@ -1353,6 +1510,7 @@ pub(crate) mod command {
         super::init_command::InitCommand::exec(&argv[2.min(argv.len())..])
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_install_completions() -> CmdResult {
@@ -1377,6 +1535,7 @@ pub(crate) mod command {
         run_command::RunCommand::exec_as_if_node(ctx)
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_bunx(log: &mut bun_ast::Log) -> CmdResult {
@@ -1398,6 +1557,7 @@ pub(crate) mod command {
         super::repl_command::ReplCommand::exec(ctx)
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_build(log: &mut bun_ast::Log) -> CmdResult {
@@ -1406,6 +1566,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_check(log: &mut bun_ast::Log) -> CmdResult {
@@ -1481,6 +1642,7 @@ pub(crate) mod command {
         )
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_audit(log: &mut bun_ast::Log) -> CmdResult {
@@ -1500,6 +1662,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn exec_fuzzilli(log: &mut bun_ast::Log) -> CmdResult {
@@ -1524,6 +1687,7 @@ pub(crate) mod command {
             )*
         };
     }
+    #[cfg(not(bun_standalone))]
     cold_exec! {
         exec_pm                 => (PackageManagerCommand, super::package_manager_command::PackageManagerCommand::exec),
         exec_install            => (InstallCommand,        super::install_command::InstallCommand::exec),
@@ -1577,6 +1741,7 @@ pub(crate) mod command {
         b"help",
     ];
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_getcompletes(log: &mut bun_ast::Log) -> crate::Result<()> {
@@ -1690,6 +1855,7 @@ pub(crate) mod command {
         Ok(())
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_create(log: &mut bun_ast::Log) -> crate::Result<()> {
@@ -1822,6 +1988,7 @@ To create a project with the official Next.js scaffolding tool, run
     }
 
     /// `bun ./bun.lockb` — print lockfile as yarn.lock (or its hash with `--hash`).
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_lockb(ctx: &mut ContextData) -> crate::Result<()> {
@@ -1856,6 +2023,7 @@ To create a project with the official Next.js scaffolding tool, run
         Printer::print(log, entry).map_err(Into::into)
     }
 
+    #[cfg(not(bun_standalone))]
     #[cold]
     #[inline(never)]
     fn bun_info(log: &mut bun_ast::Log) -> crate::Result<()> {
@@ -2108,21 +2276,27 @@ Execute a shell script directly from Bun.
                 pretty!("<b>Usage<r>: <b><green>bun getcompletes<r>");
                 Output::flush();
             }
+            #[cfg(not(bun_standalone))]
             Tag::PatchCommand => {
                 pm_print_help(PmSubcommand::Patch);
             }
+            #[cfg(not(bun_standalone))]
             Tag::PatchCommitCommand => {
                 pm_print_help(PmSubcommand::PatchCommit);
             }
+            #[cfg(not(bun_standalone))]
             Tag::OutdatedCommand => {
                 pm_print_help(PmSubcommand::Outdated);
             }
+            #[cfg(not(bun_standalone))]
             Tag::UpdateInteractiveCommand => {
                 pm_print_help(PmSubcommand::Update);
             }
+            #[cfg(not(bun_standalone))]
             Tag::PublishCommand => {
                 pm_print_help(PmSubcommand::Publish);
             }
+            #[cfg(not(bun_standalone))]
             Tag::AuditCommand => {
                 pm_print_help(PmSubcommand::Audit);
             }
@@ -2214,15 +2388,19 @@ Full documentation is available at <magenta>https://bun.com/docs/lint<r>
                 print_note_about_script("lint");
                 Output::flush();
             }
+            #[cfg(not(bun_standalone))]
             Tag::DedupeCommand => {
                 pm_print_help(PmSubcommand::Dedupe);
             }
+            #[cfg(not(bun_standalone))]
             Tag::PruneCommand => {
                 pm_print_help(PmSubcommand::Prune);
             }
+            #[cfg(not(bun_standalone))]
             Tag::InfoCommand => {
                 pm_print_help(PmSubcommand::Info);
             }
+            #[cfg(not(bun_standalone))]
             Tag::WhyCommand => {
                 pm_print_help(PmSubcommand::Why);
             }
@@ -2258,6 +2436,7 @@ Full documentation is available at <magenta>https://bun.com/docs/lint<r>
                 pretty!("<b>Usage<r>: <b><green>bun completions<r>\n");
                 Output::flush();
             }
+            #[cfg(not(bun_standalone))]
             Tag::PackageManagerCommand => {
                 pm_print_help(PmSubcommand::Pm);
             }
@@ -2265,9 +2444,11 @@ Full documentation is available at <magenta>https://bun.com/docs/lint<r>
         }
     }
 
+    #[cfg(not(bun_standalone))]
     use bun_install::package_manager_real::Subcommand as PmSubcommand;
 
     /// Forward to `bun_install::PackageManager::CommandLineArguments::print_help`.
+    #[cfg(not(bun_standalone))]
     #[inline]
     fn pm_print_help(subcommand: PmSubcommand) {
         bun_install::package_manager_real::CommandLineArguments::print_help(subcommand);

@@ -17,6 +17,8 @@ env:
 jobs:
   autofix:
     name: Format
+    # bun-slim: the draft PR slim -> bun-vX.Y.Z must not get commits from the autofix.ci bot: the series of commits is what builds.
+    if: github.head_ref != 'slim'
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}

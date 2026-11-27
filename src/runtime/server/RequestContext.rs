@@ -680,6 +680,7 @@ where
         drop(self.request_body.replace(None));
     }
 
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn set_signal_aborted(&self, reason: jsc::CommonAbortReason) {
         if let Some(signal) = self.signal.get() {
             if let Some(server) = self.server.get() {
@@ -1438,6 +1439,7 @@ where
     /// Answers 500 with no body, for a request that was saved to run later and now never will.
     /// A request that got an answer while it waited (a 413) has detached its response, so
     /// nothing more is written to it.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn end_with_internal_server_error(&self) {
         if let Some(resp) = self.resp.get() {
             self.flags.set_has_written_status(true);

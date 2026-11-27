@@ -44,6 +44,7 @@ pub(crate) mod webcore;
 pub(crate) mod bake;
 pub(crate) mod cli;
 pub(crate) mod shell;
+pub(crate) mod standalone_build;
 // `Run::boot` / `Run::boot_standalone`. Mounted here
 // (not as a separate crate) because every dependency it has is already a dep of
 // `bun_runtime`, and the CLI dispatch in `cli/` needs to call it directly. The
@@ -73,7 +74,12 @@ pub(crate) mod generated_js2native; // include!()s ${BUN_CODEGEN_DIR}/generated_
 pub(crate) mod generated_jssink; // include!()s ${BUN_CODEGEN_DIR}/generated_jssink.rs
 
 pub(crate) mod dns_jsc;
+#[cfg(not(bun_standalone))]
 pub(crate) mod image;
+#[cfg(bun_standalone)]
+#[path = "image_standalone_stub.rs"]
+pub(crate) mod image;
+#[cfg_attr(bun_standalone, allow(dead_code))]
 pub(crate) mod test_runner;
 pub(crate) mod valkey_jsc;
 
@@ -83,9 +89,10 @@ pub(crate) mod valkey_jsc;
 // Surface those names here
 // so `*_command.rs` and `test/parallel/*.rs` files resolve their
 // `use crate::…` lines without per-file edits.
-pub(crate) use cli::{
-    Cli, Command, build_command, command, filter_arg, package_manager_command, run_command,
-    shell_completions, test_command,
-};
+#[cfg_attr(bun_standalone, allow(unused_imports))]
+pub(crate) use cli::Cli;
+pub(crate) use cli::{Command, command, filter_arg, run_command, test_command};
+#[cfg(not(bun_standalone))]
+pub(crate) use cli::{build_command, package_manager_command, shell_completions};
 
 pub(crate) mod webview;

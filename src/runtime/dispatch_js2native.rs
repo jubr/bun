@@ -20,17 +20,63 @@ pub(crate) use bun_sql_jsc::postgres::create_binding as sql_jsc_postgres_create_
 // The real body already lives in this crate.
 pub(crate) use crate::api::crash_handler_jsc::js_bindings::generate as crash_handler_crash_handler_js_bindings_generate;
 
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::hosted_git_info_jsc::js_from_url as install_hosted_git_info_testing_ap_is_js_from_url;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::hosted_git_info_jsc::js_parse_url as install_hosted_git_info_testing_ap_is_js_parse_url;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::install_binding::bun_install_js_bindings::generate as install_jsc_install_binding_bun_install_js_bindings_generate;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::npm_jsc::architecture_is_match as install_npm_architecture_js_function_architecture_is_match;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::npm_jsc::operating_system_is_match as install_npm_operating_system_js_function_operating_system_is_match;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::npm_jsc::package_manifest_bindings_generate as install_npm_package_manifest_bindings_generate;
 
 // The `*_jsc` bodies live in `bun_install_jsc::ini_jsc`
 // (ini's only JSC consumer is `bun install`'s npmrc loader).
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::ini_jsc::ini_testing_load_npmrc_from_js as ini_ini_ini_testing_ap_is_load_npmrc_from_js;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_install_jsc::ini_jsc::ini_testing_parse as ini_ini_ini_testing_ap_is_parse;
+#[cfg(bun_standalone)]
+mod install_js2native_stubs {
+    use bun_jsc::{CallFrame, JSGlobalObject, JSValue, JsResult};
+    macro_rules! stub {
+        ($($name:ident),* $(,)?) => {$(
+            pub(crate) fn $name(global: &JSGlobalObject, _: &CallFrame) -> JsResult<JSValue> {
+                Err(global.throw_type_error(format_args!(
+                    "bun install internals are not available in standalone executables",
+                )))
+            }
+        )*};
+    }
+    // `*_generate` are lazy js2native fns: codegen calls them with `(global)`
+    // only (no `CallFrame`).
+    macro_rules! stub_lazy {
+        ($($name:ident),* $(,)?) => {$(
+            pub(crate) fn $name(global: &JSGlobalObject) -> JsResult<JSValue> {
+                Err(global.throw_type_error(format_args!(
+                    "bun install internals are not available in standalone executables",
+                )))
+            }
+        )*};
+    }
+    stub!(
+        install_hosted_git_info_testing_ap_is_js_from_url,
+        install_hosted_git_info_testing_ap_is_js_parse_url,
+        install_npm_architecture_js_function_architecture_is_match,
+        install_npm_operating_system_js_function_operating_system_is_match,
+        ini_ini_ini_testing_ap_is_load_npmrc_from_js,
+        ini_ini_ini_testing_ap_is_parse,
+    );
+    stub_lazy!(
+        install_jsc_install_binding_bun_install_js_bindings_generate,
+        install_npm_package_manifest_bindings_generate,
+    );
+}
+#[cfg(bun_standalone)]
+pub(crate) use install_js2native_stubs::*;
 
 pub(crate) use bun_jsc::bytecode_order_recorder::names_for_testing as jsc_bytecode_order_recorder_names_for_testing;
 pub(crate) use bun_jsc::counters::create_counters_object as jsc_counters_create_counters_object;
@@ -43,9 +89,32 @@ pub(crate) use bun_jsc::bun_string_jsc::unicode_testing_apis::to_utf16_alloc_sen
 
 pub(crate) use bun_semver_jsc::SemverObject::intersects_for_testing as semver_jsc_semver_object_intersects_for_testing;
 
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_patch_jsc::testing::patch_apply as patch_patch_testing_ap_is_apply;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_patch_jsc::testing::patch_make_diff as patch_patch_testing_ap_is_make_diff;
+#[cfg(not(bun_standalone))]
 pub(crate) use bun_patch_jsc::testing::patch_parse as patch_patch_testing_ap_is_parse;
+#[cfg(bun_standalone)]
+mod patch_js2native_stubs {
+    use bun_jsc::{CallFrame, JSGlobalObject, JSValue, JsResult};
+    macro_rules! stub {
+        ($($name:ident),* $(,)?) => {$(
+            pub(crate) fn $name(global: &JSGlobalObject, _: &CallFrame) -> JsResult<JSValue> {
+                Err(global.throw_type_error(format_args!(
+                    "bun patch internals are not available in standalone executables",
+                )))
+            }
+        )*};
+    }
+    stub!(
+        patch_patch_testing_ap_is_apply,
+        patch_patch_testing_ap_is_make_diff,
+        patch_patch_testing_ap_is_parse,
+    );
+}
+#[cfg(bun_standalone)]
+pub(crate) use patch_js2native_stubs::*;
 
 pub(crate) use bun_sourcemap_jsc::internal_jsc::testing_find as sourcemap_internal_source_map_testing_ap_is_find;
 pub(crate) use bun_sourcemap_jsc::internal_jsc::testing_from_vlq as sourcemap_internal_source_map_testing_ap_is_from_vlq;
@@ -58,11 +127,35 @@ pub(crate) use bun_sys_jsc::error_jsc::TestingAPIs::translate_uv_error_to_e as s
 pub(crate) use bun_http_jsc::headers_jsc::h2_live_counts as http_h2_client_testing_ap_is_live_counts;
 pub(crate) use bun_http_jsc::headers_jsc::h3_quic_live_counts as http_h3_client_testing_ap_is_quic_live_counts;
 
+#[cfg(not(bun_standalone))]
 mod css {
     pub(crate) use bun_css_jsc::css_internals::{
         _test, attr_test, minify_error_test_with_options, minify_test, minify_test_with_options,
         prefix_test, prefix_test_with_options, test_with_options,
     };
+}
+#[cfg(bun_standalone)]
+mod css {
+    use bun_jsc::{CallFrame, JSGlobalObject, JSValue, JsResult};
+    macro_rules! stub {
+        ($($name:ident),* $(,)?) => {$(
+            pub(crate) fn $name(global: &JSGlobalObject, _: &CallFrame) -> JsResult<JSValue> {
+                Err(global.throw_type_error(format_args!(
+                    "CSS internals are not available in standalone executables",
+                )))
+            }
+        )*};
+    }
+    stub!(
+        _test,
+        attr_test,
+        minify_error_test_with_options,
+        minify_test,
+        minify_test_with_options,
+        prefix_test,
+        prefix_test_with_options,
+        test_with_options,
+    );
 }
 pub(crate) use css::_test as css_jsc_css_internals__test;
 pub(crate) use css::attr_test as css_jsc_css_internals_attr_test;

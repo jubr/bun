@@ -442,6 +442,9 @@ pub(crate) const BUILD_ONLY_PARAMS: &[ParamType] = concat_params!(
         parse_param!(
             "--asset <STR>...                 Embed a file or directory into the compiled executable, preserving its relative path (requires --compile)"
         ),
+        parse_param!(
+            "--compile-runtime <STR>          Which Bun runtime to embed: \"full\" (default) or \"standalone\" (smaller)"
+        ),
         parse_param!("--bytecode                       Use a bytecode cache"),
         parse_param!(
             "--bytecode-depth <NUMBER>        How many levels of nested functions to compile to bytecode ahead of time. Defaults to all"
@@ -2236,6 +2239,24 @@ fn parse_build_command_options(
         ctx.bundler_options.compile = true;
         ctx.bundler_options.inline_entrypoint_import_meta_main = true;
     }
+
+    if let Some(runtime) = args.option(b"--compile-runtime") {
+        if !ctx.bundler_options.compile {
+            Output::err_generic("--compile-runtime requires --compile", ());
+            Global::crash();
+        }
+        ctx.bundler_options.compile_target.runtime = match runtime {
+            b"standalone" => bun_options_types::compile_target::CompileRuntime::Standalone,
+            b"full" => bun_options_types::compile_target::CompileRuntime::Full,
+            _ => {
+                Output::err_generic("--compile-runtime must be \"standalone\" or \"full\"", ());
+                Global::crash();
+            }
+        };
+    }
+    // The `--compile` default stays `CompileRuntime::Full` until
+    // `@oven/bun-standalone-*` packages exist on npm (first canary after this
+    // change). Flip to `Standalone` once the download path resolves.
 
     if let Some(compile_exec_argv) = args.option(b"--compile-exec-argv") {
         if !ctx.bundler_options.compile {

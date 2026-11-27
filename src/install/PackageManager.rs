@@ -2982,6 +2982,7 @@ pub fn init(
     Ok((unsafe { &mut *manager_ptr }, original_cwd_clone))
 }
 
+#[cfg(not(bun_standalone))]
 pub(crate) fn init_with_runtime(
     log: &mut bun_ast::Log,
     // Used read-only (`Options::load` only ever reads `config.*`).
@@ -3012,6 +3013,7 @@ pub(crate) fn init_with_runtime(
     }
 }
 
+#[cfg(not(bun_standalone))]
 fn init_with_runtime_once(
     log: &mut bun_ast::Log,
     bun_install: Option<&Api::BunInstall>,
@@ -3252,6 +3254,7 @@ fn init_with_runtime_once(
 /// Without a lockfile, auto-install reads the project's package.json the way `bun install` does,
 /// for its overrides, catalogs and workspaces. Each dependency is only resolved when it is
 /// imported.
+#[cfg(not(bun_standalone))]
 fn parse_runtime_root(
     manager: &mut PackageManager,
     log: &mut bun_ast::Log,

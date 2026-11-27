@@ -487,7 +487,9 @@ pub(crate) mod expect {
 
 // public surface for `crate::test_runner::*` consumers
 cfg_jsc! {
+    #[cfg_attr(bun_standalone, allow(unused_imports))]
     pub(crate) use done_callback::DoneCallback;
+    #[cfg_attr(bun_standalone, allow(unused_imports))]
     pub(crate) use expect::{
         Expect, ExpectAny, ExpectAnything, ExpectArrayContaining, ExpectCloseTo,
         ExpectCustomAsymmetricMatcher, ExpectMatcherContext, ExpectMatcherUtils,

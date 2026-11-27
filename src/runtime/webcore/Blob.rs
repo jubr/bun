@@ -4,6 +4,9 @@
 //! operations like writing `Store::File` to another `Store::File` knows to use a
 //! basic file copy instead of a naive read write loop.
 
+// bun-slim: `Bun.Image` is the only user of `read_bytes_to_handler` and the internal read-file handlers.
+#![cfg_attr(bun_standalone, allow(dead_code))]
+
 use core::cell::Cell;
 use core::ffi::{c_char, c_void};
 use core::ptr::NonNull;
@@ -5996,6 +5999,7 @@ impl Any {
     /// Unwrap the `InternalBlob` payload. Panics on any other variant — callers
     /// (e.g. DevServer asset bundling) only invoke this on values they
     /// constructed via `from_owned_slice`.
+    #[cfg_attr(bun_standalone, allow(dead_code))]
     pub(crate) fn internal_blob(&self) -> &Internal {
         match self {
             Any::InternalBlob(ib) => ib,

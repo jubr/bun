@@ -325,6 +325,14 @@ pub(crate) mod Jest {
     extern "C" fn Bun__Jest__createTestModuleObject(
         global_object: &JSGlobalObject,
     ) -> JSValue {
+        #[cfg(bun_standalone)]
+        {
+            let _ = global_object.throw(format_args!(
+                "bun:test is not available in standalone executables"
+            ));
+            JSValue::ZERO
+        }
+        #[cfg(not(bun_standalone))]
         match create_test_module(global_object) {
             Ok(v) => v,
             Err(_) => JSValue::ZERO,
@@ -471,6 +479,15 @@ pub(crate) mod Jest {
 
     #[bun_jsc::host_fn]
     pub(crate) fn call(global_object: &JSGlobalObject, callframe: &CallFrame) -> JsResult<JSValue> {
+        #[cfg(bun_standalone)]
+        {
+            let _ = callframe;
+            return Err(global_object.throw(format_args!(
+                "bun:test is not available in standalone executables"
+            )));
+        }
+        #[cfg(not(bun_standalone))]
+        {
         let vm = global_object.bun_vm();
 
         if vm.is_in_preload || runner().is_none() {
@@ -493,6 +510,7 @@ pub(crate) mod Jest {
         }
 
         jsc::from_js_host_call(global_object, || Bun__Jest__testModuleObject(global_object))
+        }
     }
 
     #[bun_jsc::host_fn]

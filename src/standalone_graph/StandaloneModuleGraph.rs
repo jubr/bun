@@ -2,21 +2,27 @@
 //! But this incurred a fixed 350ms overhead on every build, which is unacceptable
 //! so we give up on codesigning support on macOS for now until we can find a better solution
 
+#![cfg_attr(bun_standalone, allow(dead_code, unused_imports, unused_variables))]
+
 use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 use std::io::Write as _;
 use std::sync::Arc;
 
 use bun_ast::Loader;
+#[cfg_attr(bun_standalone, allow(unused_imports))]
 use bun_bundler::options::{self, OutputFile};
 use bun_collections::StringArrayHashMap;
 use bun_core::{Environment, Output};
 use bun_core::{String as BunString, StringPointer, ZStr};
+#[cfg(not(bun_standalone))]
 use bun_exe_format::{elf as bun_elf, macho as bun_macho, pe as bun_pe};
 use bun_options_types::bundle_enums::{Format, WindowsOptions};
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(bun_standalone)))]
 use bun_paths::SEP_STR;
+#[cfg(not(bun_standalone))]
 use bun_paths::fs as bun_fs;
+#[cfg_attr(bun_standalone, allow(unused_imports))]
 use bun_paths::{self as path, PathBuffer, strings};
 use bun_resolver::LINKED_BYTECODE_REGION_COUNT;
 use bun_sourcemap as SourceMap;
@@ -1505,6 +1511,7 @@ fn max_graph_bytes() -> usize {
     limit
 }
 
+#[cfg(not(bun_standalone))]
 pub(crate) fn to_bytes(
     target: &CompileTarget,
     prefix: &[u8],
@@ -2036,6 +2043,7 @@ pub(crate) fn to_bytes(
     Ok(output)
 }
 
+#[cfg(not(bun_standalone))]
 pub(crate) type InjectOptions = WindowsOptions;
 
 pub enum CompileResult {
@@ -2092,11 +2100,13 @@ impl CompileResult {
 /// its open fd plus the absolute path it was created at, which the caller
 /// renames into place (an fd cannot be mapped back to a path on every
 /// filesystem).
+#[cfg(not(bun_standalone))]
 pub(crate) struct Injected<'a> {
     pub fd: Fd,
     pub temp_path: &'a ZStr,
 }
 
+#[cfg(not(bun_standalone))]
 impl<'a> Injected<'a> {
     /// `zname` was opened relative to `cwd` (or is already absolute); pin it in
     /// `temp_path_buf` so a later `chdir` cannot retarget the rename/unlink.
@@ -2114,6 +2124,7 @@ impl<'a> Injected<'a> {
     }
 }
 
+#[cfg(not(bun_standalone))]
 pub(crate) fn inject<'a>(
     bytes: &[u8],
     self_exe: &ZStr,
@@ -2629,13 +2640,15 @@ pub(crate) fn inject<'a>(
     }
 }
 
+#[cfg(not(bun_standalone))]
 use bun_core::Environment::OperatingSystem as CompileTargetOs;
-pub use bun_options_types::compile_target::CompileTarget;
+pub use bun_options_types::compile_target::{CompileRuntime, CompileTarget};
 
 /// Moved up from `bun_options_types` (T3) so it can name
 /// `bun_http::AsyncHTTP` directly
 /// instead of routing through `extern "Rust"` shims; the only callers are the
 /// two `download*` fns below in this crate.
+#[cfg(not(bun_standalone))]
 pub(crate) fn download_to_path(
     target: &CompileTarget,
     env: &mut bun_dotenv::Loader,
@@ -2762,10 +2775,15 @@ pub(crate) fn download_to_path(
 
                 let mut did_retry = false;
                 loop {
-                    let src_name: &ZStr = if target.os == CompileTargetOs::Windows {
-                        bun_core::zstr!("bun.exe")
-                    } else {
-                        bun_core::zstr!("bun")
+                    let src_name: &ZStr = match (target.runtime, target.os) {
+                        (CompileRuntime::Standalone, CompileTargetOs::Windows) => {
+                            bun_core::zstr!("bun-standalone.exe")
+                        }
+                        (CompileRuntime::Standalone, _) => bun_core::zstr!("bun-standalone"),
+                        (CompileRuntime::Full, CompileTargetOs::Windows) => {
+                            bun_core::zstr!("bun.exe")
+                        }
+                        (CompileRuntime::Full, _) => bun_core::zstr!("bun"),
                     };
                     let mv = bun_sys::move_file_z(tmpdir.fd(), src_name, Fd::INVALID, dest_z);
                     if mv.is_err() {
@@ -2794,6 +2812,7 @@ pub(crate) fn download_to_path(
     Ok(())
 }
 
+#[cfg(not(bun_standalone))]
 /// The bun executable a `--compile` build for `target` injects into: `self_exe_path` if given, this process for the
 /// host target, otherwise the cached download of that platform's bun at this version (fetched now if missing).
 pub fn target_executable(
@@ -2866,6 +2885,16 @@ pub fn target_executable(
     })
 }
 
+#[cfg(bun_standalone)]
+pub fn target_builtins(
+    _target: &CompileTarget,
+    _env: &mut bun_dotenv::Loader,
+    _self_exe_path: Option<&[u8]>,
+) -> Result<Option<std::sync::Arc<[u8]>>, CompileError> {
+    Ok(None)
+}
+
+#[cfg(not(bun_standalone))]
 /// `--compile --bytecode` for another platform: that executable's builtins section (`bun_exe_format::builtins`), so
 /// the bundler can generate bytecode for *its* internal modules. `Ok(None)` when the executable has no section this bun
 /// can read; builtin bytecode is skipped then.
@@ -2901,6 +2930,27 @@ pub fn target_builtins(
     }
 }
 
+#[cfg(bun_standalone)]
+pub fn to_executable(
+    _target: &CompileTarget,
+    _output_files: &[OutputFile],
+    _root_dir: Fd,
+    _module_prefix: &[u8],
+    _outfile: &[u8],
+    _env: &mut bun_dotenv::Loader,
+    _output_format: Format,
+    _windows_options: &WindowsOptions,
+    _compile_exec_argv: &[u8],
+    _self_exe_path: Option<&[u8]>,
+    _flags: Flags,
+    _runtime_options: RuntimeOptions,
+) -> crate::Result<CompileResult> {
+    Ok(CompileResult::fail_fmt(format_args!(
+        "bun build --compile is not available in standalone executables"
+    )))
+}
+
+#[cfg(not(bun_standalone))]
 pub fn to_executable(
     target: &CompileTarget,
     output_files: &[OutputFile],
@@ -3489,6 +3539,7 @@ pub struct SerializedSourceMapLoaded {
     pub decompressed_files: Box<[std::sync::OnceLock<Vec<u8>>]>,
 }
 
+#[cfg(not(bun_standalone))]
 pub(crate) fn serialize_json_source_map_for_standalone(
     header_list: &mut Vec<u8>,
     string_payload: &mut Vec<u8>,

@@ -112,6 +112,13 @@ unsafe extern "C" {
     ) -> *mut JSPromise;
 }
 
+#[cfg(bun_standalone)]
+#[unsafe(no_mangle)]
+extern "C" fn BakeToWindowsPath(_input: &BunString) -> BunString {
+    BunString::DEAD
+}
+
+#[cfg(not(bun_standalone))]
 #[unsafe(no_mangle)]
 extern "C" fn BakeToWindowsPath(input: &BunString) -> BunString {
     #[cfg(unix)]
@@ -129,6 +136,17 @@ extern "C" fn BakeToWindowsPath(input: &BunString) -> BunString {
     }
 }
 
+#[cfg(bun_standalone)]
+#[unsafe(no_mangle)]
+extern "C" fn BakeProdResolve(
+    _global: &JSGlobalObject,
+    _a_str: &BunString,
+    _specifier_str: &BunString,
+) -> BunString {
+    BunString::DEAD
+}
+
+#[cfg(not(bun_standalone))]
 #[unsafe(no_mangle)]
 extern "C" fn BakeProdResolve(
     global: &JSGlobalObject,
@@ -173,6 +191,13 @@ extern "C" fn BakeProdResolve(
 }
 
 /// Given a key, returns the source code to load.
+#[cfg(bun_standalone)]
+#[unsafe(no_mangle)]
+extern "C" fn BakeProdLoad(_pt: *mut PerThread, _key: &BunString) -> BunString {
+    BunString::DEAD
+}
+
+#[cfg(not(bun_standalone))]
 #[unsafe(no_mangle)]
 extern "C" fn BakeProdLoad(pt: *mut PerThread, key: &BunString) -> BunString {
     // SAFETY: `pt` is the non-null pointer previously attached via

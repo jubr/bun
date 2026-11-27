@@ -1,0 +1,25 @@
+# Local toolchain for building the bun-standalone PR on macOS arm64.
+# Only the tools the host lacks (or has at the wrong version); ninja, ccache, go,
+# ruby, automake and libtool come from Homebrew / the global mise config.
+
+[tools]
+# Release bun runs the build scripts and codegen: the version in LATEST (upstream's bootstrap bun).
+bun = "{{ read_file(path='LATEST') | trim }}"
+# scripts/bootstrap.sh pins 3.30.5; configure.ts needs >= 3.24.
+cmake = "3.30.5"
+# scripts/build/tools.ts LLVM_VERSION: clang must be 23.1.x (same major as rustc LLVM). Apple clang is 21.
+"github:llvm/llvm-project" = { version = "llvmorg-23.1.5", asset_pattern = "LLVM-23.1.5-macOS-ARM64.tar.xz", bin_path = "LLVM-23.1.5-macOS-ARM64/bin" }
+# rust-toolchain.toml pins the nightly; the build also asks rustup for it.
+rust = { version = "nightly-2026-09-15", profile = "minimal", components = "rust-src,llvm-tools", targets = "aarch64-apple-darwin" }
+
+[env]
+# Upstream LLVM clang does not find the macOS SDK on its own (host-cc steps compile without -isysroot).
+SDKROOT = "{{ exec(command='xcrun --show-sdk-path') }}"
+
+[tasks."build:standalone"]
+description = "bun-standalone (release) -> build/release-standalone/bun-standalone"
+run = "bun scripts/build.ts --profile=release --standalone=on --build-dir=build/release-standalone"
+
+[tasks."build:standalone:debug"]
+description = "bun-standalone (debug) -> build/debug-standalone/bun-standalone-debug"
+run = "bun scripts/build.ts --profile=debug --standalone=on --build-dir=build/debug-standalone"
